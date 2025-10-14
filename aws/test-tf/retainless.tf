@@ -1,0 +1,3 @@
+module "retainless" {
+  source = "../terraform"
+}

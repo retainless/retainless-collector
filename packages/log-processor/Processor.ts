@@ -1,15 +1,20 @@
+import * as Crypto from "node:crypto";
+import { DateTime, Settings } from "luxon";
+
+Settings.throwOnInvalid = true;
+
 export interface AccessLogRow {
     ipAddress: string;
     userAgent: string;
-    date: Date;
+    date: DateTime;
     path: string;
 }
 
 export interface RetentionRow {
-    periodStart: Date;
+    periodStart: DateTime;
     periodUserId: string;
-    firstSeen: Date;
-    lastSeen: Date;
+    firstSeen: DateTime;
+    lastSeen: DateTime;
     requestCount: number;
 }
 
@@ -19,8 +24,10 @@ export async function getUserId(
     appSecret: string,
     periodSalt: string,
 ): Promise<string> {
-    // todo- Sha256 of parameters
-    return "tbd";
+    const concatenatedString = `${ipAddress}${userAgent}${appSecret}${periodSalt}`;
+    return Crypto.createHash("sha256")
+        .update(concatenatedString)
+        .digest('hex');
 }
 
 export async function processLogs(
@@ -29,15 +36,61 @@ export async function processLogs(
     config = {
         appSecret: "current",
         periodSalt: "current",
+        periodStart: DateTime.now(),
         retainedPeriods: [{
             appSecretPrev: "previous", // only different if this is the first period after key rotation
             periodSaltPrev: "previous",
         }],
     },
 ): Promise<RetentionRow[]> {
-    // todo:
-    // 1. hash and group each accessLog by `[ip + ua] + appSecret + periodSalt`
-    // 2. foreach retainedPeriods, lookup each retainedUser by `[ip + ua] + appSecretPrev + periodSaltPrev`, replace `firstSeen` and break if matched
-    // 3. return updated retention data
-    return [];
+    // 1. Hash and group access logs by current period user ID
+    const currentPeriodGroups = new Map<string, AccessLogRow[]>();
+
+    for (const log of accessLog) {
+        const userId = await getUserId(
+            log.ipAddress,
+            log.userAgent,
+            config.appSecret,
+            config.periodSalt
+        );
+
+        if (!currentPeriodGroups.has(userId)) {
+            currentPeriodGroups.set(userId, []);
+        }
+        currentPeriodGroups.get(userId)!.push(log);
+    }
+
+    // Process each group to create/update retention rows
+    const updatedRetention: RetentionRow[] = [];
+
+    for (const [periodUserId, logs] of currentPeriodGroups) {
+        const dates = logs.map(log => log.date);
+        const lastSeen = DateTime.max(...dates) as DateTime;
+
+        let firstSeen = DateTime.min(...dates) as DateTime;
+        for (const period of config.retainedPeriods) {
+            const previousUserId = await getUserId(
+                logs[0].ipAddress,
+                logs[0].userAgent,
+                period.appSecretPrev,
+                period.periodSaltPrev
+            );
+
+            const existingUser = retainedUsers.find(u => u.periodUserId === previousUserId);
+            if (existingUser) {
+                firstSeen = existingUser.firstSeen;
+                break;
+            }
+        }
+
+        updatedRetention.push({
+            periodStart: config.periodStart,
+            periodUserId,
+            firstSeen,
+            lastSeen,
+            requestCount: logs.length
+        });
+    }
+
+    return updatedRetention;
 }

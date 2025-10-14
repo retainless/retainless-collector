@@ -1,1 +1,7 @@
 node_modules/
+build/
+.terraform/
+
+*/test-tf/.terraform.lock.hcl
+*/test-tf/terraform.tfstate
+*/test-tf/terraform.tfstate.backup
