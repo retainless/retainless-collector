@@ -1,7 +1,8 @@
 import * as Crypto from "node:crypto";
 import {CloudWatchLogs} from "@aws-sdk/client-cloudwatch-logs";
 import {DynamoDB} from "@aws-sdk/client-dynamodb";
-import {DateTime} from "luxon";
+import {DateTime, Duration} from "luxon";
+import {mapLimit} from "async";
 import {AccessLogRow, Period, processLogs, RetentionRow} from "../Processor.js";
 import type {
     GetQueryResultsCommandOutput
@@ -60,45 +61,82 @@ async function getAccessLogs(
     start: DateTime,
     end: DateTime,
     filters: string[] = [],
+    maxDuration = Duration.fromDurationLike({ hours: 2 }),
 ): Promise<AccessLogRow[]> {
-    const response = await clientCWL.startQuery({
-        logGroupIdentifiers: [
-            logGroupArn.replace(/:\*$/, '')
-        ],
-        queryLanguage: "CWLI",
-        startTime: start.toUnixInteger(),
-        endTime: end.toUnixInteger(),
-        queryString: [
-            ...filters,
-            'fields @timestamp, `c-ip` as ip, `cs(User-Agent)` as ua, `cs-uri-stem` as path',
-            'sort @timestamp desc'
-        ].join('\n| '),
-    });
+    const queryString = [
+        ...filters,
+        'fields @timestamp, `c-ip` as ip, `cs(User-Agent)` as ua, `cs-uri-stem` as path',
+        'filter ispresent(ip)',
+        'sort @timestamp desc'
+    ].join('\n| ');
 
-    let results: GetQueryResultsCommandOutput;
-    do {
-        results = await clientCWL.getQueryResults({
-            queryId: response.queryId
+    const logGroupInfo = await clientCWL.describeLogGroups({
+        logGroupIdentifiers: [logGroupArn]
+    })
+
+    const creationTime = DateTime.fromMillis(logGroupInfo.logGroups[0].creationTime);
+    const retentionEarliest = DateTime.now().minus({ days: logGroupInfo.logGroups[0].retentionInDays });
+
+    const ranges: { start: DateTime, end: DateTime }[] = [];
+    let rangeStart = start;
+
+    if (rangeStart < retentionEarliest) {
+        rangeStart = retentionEarliest;
+    }
+    if (rangeStart < creationTime) {
+        rangeStart = creationTime;
+    }
+
+    while (rangeStart < end) {
+        const rangeEnd = rangeStart.plus(maxDuration);
+        ranges.push({
+            start: rangeStart,
+            end: rangeEnd > end ? end : rangeEnd
+        });
+        rangeStart = rangeEnd;
+    }
+
+    const results = await mapLimit(ranges, 5, async (range) => {
+        console.log(`Running query ('${range.start.toSQL()}' to '${range.end.toSQL()}'):\n${queryString}`);
+        const response = await clientCWL.startQuery({
+            logGroupIdentifiers: [logGroupArn],
+            queryLanguage: "CWLI",
+            startTime: range.start.toUnixInteger(),
+            endTime: range.end.toUnixInteger(),
+            queryString,
         });
 
-        if (results.status === 'Running'
-            || results.status === 'Scheduled'
-            || results.status === 'Unknown') {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        let queryResults: GetQueryResultsCommandOutput;
+        do {
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            queryResults = await clientCWL.getQueryResults({
+                queryId: response.queryId
+            });
+        } while (queryResults.status === 'Running'
+            || queryResults.status === 'Scheduled'
+            || queryResults.status === 'Unknown');
+
+        if (queryResults.status !== 'Complete') {
+            throw new Error(`Query failed: ${queryResults.status}`);
         }
-    } while (results.status === 'Running');
 
-    const logs = results.results?.map(fields => {
-        const fieldMap = new Map(fields.map(f => [f.field, f.value]));
-        return {
-            ipAddress: fieldMap.get('ip'),
-            userAgent: fieldMap.get('ua'),
-            date: DateTime.fromSQL(fieldMap.get('@timestamp')),
-            path: fieldMap.get('path'),
-        };
-    }) ?? [];
+        if (queryResults.statistics.recordsMatched >= 9000) {
+            throw new Error(`Query too close, ${queryResults.statistics.recordsMatched}, to limit ('${range.start.toSQL()}' to '${range.end.toSQL()}'). Reduce 'maxDuration' for logs`);
+        }
 
-    return logs;
+        return queryResults.results?.map(fields => {
+            const fieldMap = new Map(fields.map(f => [f.field, f.value]));
+            return {
+                ipAddress: fieldMap.get('ip'),
+                userAgent: fieldMap.get('ua'),
+                date: DateTime.fromSQL(fieldMap.get('@timestamp')),
+                path: fieldMap.get('path'),
+            };
+        }) ?? [];
+    });
+
+    return results.flat();
 }
 
 export async function handler(event) {
@@ -107,8 +145,13 @@ export async function handler(event) {
         tableNameUsers: process.env.DYNAMODB_TABLE_USERS || "retainless-db-users",
 
         applicationId: process.env.APPLICATION_ID || "retainless-app",
-        logGroupArn: process.env.LOG_GROUP_ARN || "",
+        logGroupArn: process.env.LOG_GROUP_ARN?.replace(/:\*$/, '') || "",
         logStreamName: process.env.LOG_STREAM_NAME,
+        logMaxDuration: event.logMaxDuration
+            ? Duration.fromDurationLike({ second: event.logMaxDuration })
+            : process.env.LOG_MAX_DURATION
+                ? Duration.fromDurationLike({ second: Number(process.env.LOG_MAX_DURATION) })
+                :  Duration.fromDurationLike({ hours: 2 }),
 
         periodLength: Number(process.env.PERIOD_LENGTH) || 7,
         periodExpiration: Number(process.env.PERIOD_EXPIRATION) || 4,
@@ -134,7 +177,7 @@ export async function handler(event) {
     console.log(`Getting access logs for ${periodStart.toISO()} to ${config.periodEnd.toISO()}`);
     const accessLogs = await getAccessLogs(config.logGroupArn, periodStart, config.periodEnd, config.logStreamName ? [
         `filter @logStream = '${config.logStreamName}'`
-    ] : []);
+    ] : [], config.logMaxDuration);
 
     const retainedUsers = await processLogs(accessLogs, users, {
         appSecret,
@@ -142,8 +185,7 @@ export async function handler(event) {
         periodId,
         retainedPeriods: periodsPrev,
     })
-
-    console.log(`Writing ${retainedUsers.length} users to DynamoDB`);
+    
     await clientDDB.transactWriteItems({
         TransactItems: [{
             Put: {
@@ -156,17 +198,27 @@ export async function handler(event) {
                     SecretVersion: { S: appSecretVersion },
                 }
             }
-        }, ...retainedUsers.map((user) => ({
-            Put: {
-                TableName: config.tableNameUsers,
-                Item: {
-                    PeriodId: { S: periodId },
-                    UserId: { S: user.periodUserId },
-                    FirstSeen: { S: user.firstSeen.toISO() },
-                    LastSeen: { S: user.lastSeen.toISO() },
-                    RequestCount: { N: user.requestCount.toString() },
-                }
+        }]
+    });
+
+    console.log(`Writing ${retainedUsers.length} users to DynamoDB`);
+    const TransactItems = retainedUsers.map((user) => ({
+        Put: {
+            TableName: config.tableNameUsers,
+            Item: {
+                PeriodId: {S: periodId},
+                UserId: {S: user.periodUserId},
+                FirstSeen: {S: user.firstSeen.toISO()},
+                LastSeen: {S: user.lastSeen.toISO()},
+                RequestCount: {N: user.requestCount.toString()},
             }
-        }))]
-    })
+        }
+    }));
+
+    for (let i = 0; i < TransactItems.length; i += 100) {
+        const batch = TransactItems.slice(i, i + 100);
+        await clientDDB.transactWriteItems({
+            TransactItems: batch
+        });
+    }
 }

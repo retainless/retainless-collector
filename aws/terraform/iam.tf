@@ -52,6 +52,11 @@ resource "aws_iam_role_policy" "sync" {
         Resource = [
           var.log_group_arn
         ]
+      }, {
+        // https://stackoverflow.com/questions/62085074/cloud-watch-log-access-to-an-iam-user-for-only-only-one-specific-log-group#comment109826709_62085074
+        Effect = "Allow",
+        Action = "logs:DescribeLogGroups",
+        Resource = "*"
       }
     ]
   })
