@@ -2,14 +2,20 @@ import "jest";
 import {AccessLogRow, getUserId, processLogs, RetentionRow} from "../Processor";
 import {DateTime} from "luxon";
 
-describe("Processor", () => {
-    const periodStart = DateTime.fromISO("2025-01-01T00:00:00.000Z");
+declare module 'luxon' {
+    interface TSSettings {
+        throwOnInvalid: true
+    }
+}
 
+describe("Processor", () => {
     const config: Parameters<typeof processLogs>[2] = {
         appSecret: "appSecret",
         periodSalt: "periodSalt",
-        periodStart,
+        periodId: "B",
         retainedPeriods: [{
+            periodId: "A",
+            periodEnd: DateTime.fromISO("2025-12-31T00:00:00.000Z"),
             appSecretPrev: "appSecretPrev",
             periodSaltPrev: "periodSaltPrev",
         }],
@@ -32,7 +38,7 @@ describe("Processor", () => {
         const result = await processLogs(accessLog, retainedUsers, config);
 
         expect(result).toMatchObject([{
-            periodStart,
+            periodId: "B",
             periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
             firstSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),
@@ -53,7 +59,7 @@ describe("Processor", () => {
             path: "/my/site?q=bye",
         }];
         const retainedUsers: RetentionRow[] = [{
-            periodStart: DateTime.fromISO("2024-12-25T00:00:00.000Z"),
+            periodId: "B",
             periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
             firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-12-30T07:01:00.000Z"),
@@ -63,7 +69,7 @@ describe("Processor", () => {
         const result = await processLogs(accessLog, retainedUsers, config);
 
         expect(result).toMatchObject([{
-            periodStart,
+            periodId: "B",
             periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
             firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),
@@ -84,7 +90,7 @@ describe("Processor", () => {
             path: "/page2",
         }];
         const retainedUsers: RetentionRow[] = [{
-            periodStart: DateTime.fromISO("2025-12-25T00:00:00.000Z"),
+            periodId: "A",
             periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
             firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-12-30T07:01:00.000Z"),
@@ -94,13 +100,13 @@ describe("Processor", () => {
         const result = await processLogs(accessLog, retainedUsers, config);
 
         expect(result).toMatchObject([{
-            periodStart,
+            periodId: "B",
             periodUserId: await getUserId("1.1.1.1", "Chrome", "appSecret", "periodSalt"),
             firstSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
             requestCount: 1,
         }, {
-            periodStart,
+            periodId: "B",
             periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
             firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
             lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),

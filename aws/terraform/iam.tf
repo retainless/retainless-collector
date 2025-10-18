@@ -33,8 +33,25 @@ resource "aws_iam_role_policy" "sync" {
     Statement = [
       {
         Effect = "Allow",
-        Action = "dynamodb:Scan"
-        Resource = aws_dynamodb_table.periods.arn
+        Action = [
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+        ],
+        Resource = [
+          aws_dynamodb_table.periods.arn,
+          aws_dynamodb_table.users.arn,
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+        ],
+        Resource = [
+          var.log_group_arn
+        ]
       }
     ]
   })

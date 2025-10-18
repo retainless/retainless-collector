@@ -3,6 +3,13 @@ import { DateTime, Settings } from "luxon";
 
 Settings.throwOnInvalid = true;
 
+export interface Period {
+    periodId: string;
+    periodEnd: DateTime;
+    appSecretPrev: string;
+    periodSaltPrev: string;
+}
+
 export interface AccessLogRow {
     ipAddress: string;
     userAgent: string;
@@ -11,7 +18,7 @@ export interface AccessLogRow {
 }
 
 export interface RetentionRow {
-    periodStart: DateTime;
+    periodId: string;
     periodUserId: string;
     firstSeen: DateTime;
     lastSeen: DateTime;
@@ -36,11 +43,11 @@ export async function processLogs(
     config = {
         appSecret: "current",
         periodSalt: "current",
-        periodStart: DateTime.now(),
+        periodId: DateTime.now().toISO(),
         retainedPeriods: [{
             appSecretPrev: "previous", // only different if this is the first period after key rotation
             periodSaltPrev: "previous",
-        }],
+        } as Period],
     },
 ): Promise<RetentionRow[]> {
     // 1. Hash and group access logs by current period user ID
@@ -84,7 +91,7 @@ export async function processLogs(
         }
 
         updatedRetention.push({
-            periodStart: config.periodStart,
+            periodId: config.periodId,
             periodUserId,
             firstSeen,
             lastSeen,
