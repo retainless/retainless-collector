@@ -23,36 +23,32 @@ async function getRetainedPeriods(tableNamePeriods: string): Promise<Period[]> {
         periodSaltPrev: doc.PeriodSalt.S,
     })) ?? [];
 
-    periodsPrev.sort((a, b) => a.periodEnd < b.periodEnd ? -1 : a.periodEnd > b.periodEnd ? 1 : 0);
+    periodsPrev.sort((a, b) => a.periodEnd < b.periodEnd ? 1 : a.periodEnd > b.periodEnd ? -1 : 0);
 
     return periodsPrev;
 }
 
-async function getRetentionUsers(periodsPrev: Period[], tableNameUsers: string): Promise<RetentionRow[]> {
-    const userDocs = await Promise.all(periodsPrev.map(async (period) => {
-        const periodUsers = await clientDDB.query({
-            TableName: tableNameUsers,
-            KeyConditionExpression: "PeriodId = :periodId",
-            ExpressionAttributeValues: {
-                ":periodId": {S: period.periodId},
-            },
-        });
+async function getRetentionUsers(
+    periodPrev: Period,
+    tableNameUsers: string
+): Promise<RetentionRow[]> {
+    const periodUsers = await clientDDB.query({
+        TableName: tableNameUsers,
+        KeyConditionExpression: "PeriodId = :periodId",
+        ExpressionAttributeValues: {
+            ":periodId": {S: periodPrev.periodId},
+        },
+    });
 
-        return {
-            periodId: period.periodId,
-            items: periodUsers.Items ?? [],
-        };
+    const users = periodUsers.Items.map((user): RetentionRow => ({
+        periodId: user.UserIdPeriod.S,
+        periodUserId: user.UserId.S,
+        visitInitial: DateTime.fromISO(user.VisitInitial.S),
+        visitsPrior: user.VisitsPrior?.SS.map((visit) => DateTime.fromISO(visit)) ?? [],
+        visitLatest: DateTime.fromISO(user.VisitLatest.S),
+        requestCount: parseInt(user.RequestCount.N),
     }));
 
-    const users = userDocs.flatMap((period) => {
-        return period.items.map((user): RetentionRow => ({
-            periodId: period.periodId,
-            periodUserId: user.UserId.S,
-            firstSeen: DateTime.fromISO(user.FirstSeen.S),
-            lastSeen: DateTime.fromISO(user.LastSeen.S),
-            requestCount: parseInt(user.RequestCount.N),
-        }))
-    })
     return users;
 }
 
@@ -69,6 +65,8 @@ async function getAccessLogs(
         'filter ispresent(ip)',
         'sort @timestamp desc'
     ].join('\n| ');
+
+    console.log(`Using query string:\n${queryString}`);
 
     const logGroupInfo = await clientCWL.describeLogGroups({
         logGroupIdentifiers: [logGroupArn]
@@ -96,8 +94,12 @@ async function getAccessLogs(
         rangeStart = rangeEnd;
     }
 
+    if (ranges.length === 0) {
+        throw new Error(`Empty time periods for log group creation: '${creationTime.toSQL()}', retained to: '${retentionEarliest.toSQL()}'`);
+    }
+
     const results = await mapLimit(ranges, 5, async (range) => {
-        console.log(`Running query ('${range.start.toSQL()}' to '${range.end.toSQL()}'):\n${queryString}`);
+        console.log(`Running query ('${range.start.toSQL()}' to '${range.end.toSQL()}')`);
         const response = await clientCWL.startQuery({
             logGroupIdentifiers: [logGroupArn],
             queryLanguage: "CWLI",
@@ -153,8 +155,7 @@ export async function handler(event) {
                 ? Duration.fromDurationLike({ second: Number(process.env.LOG_MAX_DURATION) })
                 :  Duration.fromDurationLike({ hours: 2 }),
 
-        periodLength: Number(process.env.PERIOD_LENGTH) || 7,
-        periodExpiration: Number(process.env.PERIOD_EXPIRATION) || 4,
+        periodExpiration: Number(process.env.PERIOD_EXPIRATION) || 30,
         periodEnd: event.periodEnd ? DateTime.fromISO(event.periodEnd) : DateTime.now(),
     };
 
@@ -164,12 +165,14 @@ export async function handler(event) {
     const appSecret = `todo-secretsmanager-AWSCURRENT`;
     const appSecretVersion = "$res.SecretVersion";
     const periodStart = periodsPrev.length > 0
-        ? periodsPrev[periodsPrev.length - 1].periodEnd
-        : config.periodEnd.minus({ day: config.periodLength * config.periodExpiration });
+        ? periodsPrev[0].periodEnd
+        : config.periodEnd.minus({ day: 1 });
     const periodSalt = Crypto.randomBytes(128).toString('base64');
 
-    console.log(`Loading retained users for ${periodsPrev.length} periods`);
-    const users = await getRetentionUsers(periodsPrev, config.tableNameUsers);
+    console.log(`Loading retained users from previous period`);
+    const users = periodsPrev.length > 0
+        ? await getRetentionUsers(periodsPrev[0], config.tableNameUsers)
+        : [];
 
     const periodSK = config.periodEnd.toISO();
     const periodId = `${config.applicationId}-${periodSK}`;
@@ -185,7 +188,8 @@ export async function handler(event) {
         periodId,
         retainedPeriods: periodsPrev,
     })
-    
+
+    console.log(`Writing period to DynamoDB`);
     await clientDDB.transactWriteItems({
         TransactItems: [{
             Put: {
@@ -193,7 +197,7 @@ export async function handler(event) {
                 Item: {
                     ApplicationId: { S: config.applicationId },
                     PeriodEnd: { S: periodSK },
-                    PeriodExpires: { N: `${config.periodEnd.plus({ day: config.periodLength * config.periodExpiration }).toUnixInteger()}` },
+                    PeriodExpires: { N: `${config.periodEnd.plus({ day: config.periodExpiration }).toUnixInteger()}` },
                     PeriodSalt: { S: periodSalt },
                     SecretVersion: { S: appSecretVersion },
                 }
@@ -208,8 +212,12 @@ export async function handler(event) {
             Item: {
                 PeriodId: {S: periodId},
                 UserId: {S: user.periodUserId},
-                FirstSeen: {S: user.firstSeen.toISO()},
-                LastSeen: {S: user.lastSeen.toISO()},
+                UserIdPeriod: {S: user.periodId},
+                VisitInitial: {S: user.visitInitial.toISO()},
+                ...(user.visitsPrior.length > 0 ? {
+                    VisitsPrior: {SS: user.visitsPrior.map((visit) => visit.toISO())},
+                } : {}),
+                VisitLatest: {S: user.visitLatest.toISO()},
                 RequestCount: {N: user.requestCount.toString()},
             }
         }
@@ -221,4 +229,10 @@ export async function handler(event) {
             TransactItems: batch
         });
     }
+}
+
+if (!process.env.ESBUILD) {
+    await handler({
+        periodEnd: "2025-10-17T05:00:00Z"
+    });
 }

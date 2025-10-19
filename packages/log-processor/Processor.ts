@@ -20,8 +20,9 @@ export interface AccessLogRow {
 export interface RetentionRow {
     periodId: string;
     periodUserId: string;
-    firstSeen: DateTime;
-    lastSeen: DateTime;
+    visitInitial: DateTime;
+    visitsPrior: DateTime[];
+    visitLatest: DateTime;
     requestCount: number;
 }
 
@@ -44,15 +45,24 @@ export async function processLogs(
         appSecret: "current",
         periodSalt: "current",
         periodId: DateTime.now().toISO(),
-        retainedPeriods: [{
-            appSecretPrev: "previous", // only different if this is the first period after key rotation
-            periodSaltPrev: "previous",
-        } as Period],
+        retainedPeriods: <Period[]>[],
     },
 ): Promise<RetentionRow[]> {
-    // 1. Hash and group access logs by current period user ID
-    const currentPeriodGroups = new Map<string, AccessLogRow[]>();
+    const retainedUsersByUserId = new Map<string, RetentionRow>();
+    for (const user of retainedUsers) {
+        const isPeriodHashable = !!config.retainedPeriods.find(period => period.periodId === user.periodId);
 
+        if (isPeriodHashable) {
+            retainedUsersByUserId.set(user.periodUserId, {
+                ...user,
+                requestCount: 0,
+            });
+        }
+    }
+
+    console.log(`Dropping ${retainedUsers.length - retainedUsersByUserId.size} users as unhashable.`);
+
+    const accessLogsByUserId = new Map<string, AccessLogRow[]>();
     for (const log of accessLog) {
         const userId = await getUserId(
             log.ipAddress,
@@ -61,20 +71,17 @@ export async function processLogs(
             config.periodSalt
         );
 
-        if (!currentPeriodGroups.has(userId)) {
-            currentPeriodGroups.set(userId, []);
+        if (!accessLogsByUserId.has(userId)) {
+            accessLogsByUserId.set(userId, []);
         }
-        currentPeriodGroups.get(userId)!.push(log);
+        accessLogsByUserId.get(userId)!.push(log);
     }
 
-    // Process each group to create/update retention rows
-    const updatedRetention: RetentionRow[] = [];
-
-    for (const [periodUserId, logs] of currentPeriodGroups) {
+    for (const [periodUserId, logs] of accessLogsByUserId) {
         const dates = logs.map(log => log.date);
         const lastSeen = DateTime.max(...dates) as DateTime;
 
-        let firstSeen = DateTime.min(...dates) as DateTime;
+        let existingUser: RetentionRow;
         for (const period of config.retainedPeriods) {
             const previousUserId = await getUserId(
                 logs[0].ipAddress,
@@ -83,21 +90,34 @@ export async function processLogs(
                 period.periodSaltPrev
             );
 
-            const existingUser = retainedUsers.find(u => u.periodUserId === previousUserId);
+            existingUser = retainedUsersByUserId.get(previousUserId);
             if (existingUser) {
-                firstSeen = existingUser.firstSeen;
                 break;
             }
         }
 
-        updatedRetention.push({
-            periodId: config.periodId,
-            periodUserId,
-            firstSeen,
-            lastSeen,
-            requestCount: logs.length
-        });
+        if (existingUser) {
+            retainedUsersByUserId.set(existingUser.periodUserId, {
+                periodId: config.periodId,
+                periodUserId,
+                visitInitial: existingUser.visitInitial,
+                visitsPrior: [...existingUser.visitsPrior, existingUser.visitLatest],
+                visitLatest: lastSeen,
+                requestCount: logs.length,
+            })
+        } else {
+            const firstSeen = DateTime.min(...dates) as DateTime;
+
+            retainedUsersByUserId.set(periodUserId, {
+                periodId: config.periodId,
+                periodUserId,
+                visitInitial: firstSeen,
+                visitsPrior: [],
+                visitLatest: lastSeen,
+                requestCount: logs.length,
+            });
+        }
     }
 
-    return updatedRetention;
+    return [...retainedUsersByUserId.values()];
 }

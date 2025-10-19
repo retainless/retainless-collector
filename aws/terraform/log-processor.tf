@@ -34,11 +34,12 @@ resource "aws_lambda_function" "log_processor" {
     variables = {
       DYNAMODB_TABLE_PERIODS = aws_dynamodb_table.periods.name,
       DYNAMODB_TABLE_USERS = aws_dynamodb_table.users.name,
-      APPLICATION_ID = "retainless-app",
       LOG_GROUP_ARN = var.log_group_arn,
       LOG_STREAM_NAME = var.log_stream_name,
-      PERIOD_LENGTH = "7"
-      PERIOD_EXPIRATION = "4"
+
+      # APPLICATION_ID = "retainless-app",
+      # LOG_MAX_DURATION = "3600"
+      # PERIOD_EXPIRATION = "30"
     }
   }
 }

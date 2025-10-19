@@ -5,6 +5,7 @@ await Esbuild.build({
     platform: "node",
     define: {
         'process.env.NODE_ENV': JSON.stringify("production"),
+        'process.env.ESBUILD': JSON.stringify("true"),
     },
     bundle: true,
     format: 'esm',
