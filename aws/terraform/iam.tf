@@ -41,6 +41,7 @@ resource "aws_iam_role_policy" "sync" {
         Resource = [
           aws_dynamodb_table.periods.arn,
           aws_dynamodb_table.users.arn,
+          "${aws_dynamodb_table.users.arn}/index/*",
         ]
       },
       {

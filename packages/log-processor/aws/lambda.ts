@@ -1,6 +1,6 @@
 import * as Crypto from "node:crypto";
 import {CloudWatchLogs} from "@aws-sdk/client-cloudwatch-logs";
-import {DynamoDB} from "@aws-sdk/client-dynamodb";
+import {AttributeValue, DynamoDB} from "@aws-sdk/client-dynamodb";
 import {DateTime, Duration} from "luxon";
 import {mapLimit} from "async";
 import {AccessLogRow, Period, processLogs, RetentionRow} from "../Processor.js";
@@ -11,9 +11,16 @@ import type {
 const clientDDB = new DynamoDB();
 const clientCWL = new CloudWatchLogs();
 
-async function getRetainedPeriods(tableNamePeriods: string): Promise<Period[]> {
-    const periodsPrevDocs = await clientDDB.scan({
+async function getRetainedPeriods(
+    tableNamePeriods: string,
+    applicationId = "retainless-app",
+): Promise<Period[]> {
+    const periodsPrevDocs = await clientDDB.query({
         TableName: tableNamePeriods,
+        KeyConditionExpression: "ApplicationId = :applicationId",
+        ExpressionAttributeValues: {
+            ":applicationId": {S: applicationId},
+        },
     });
 
     const periodsPrev = periodsPrevDocs.Items?.map((doc): Period => ({
@@ -32,23 +39,33 @@ async function getRetentionUsers(
     periodPrev: Period,
     tableNameUsers: string
 ): Promise<RetentionRow[]> {
-    const periodUsers = await clientDDB.query({
-        TableName: tableNameUsers,
-        KeyConditionExpression: "PeriodId = :periodId",
-        ExpressionAttributeValues: {
-            ":periodId": {S: periodPrev.periodId},
-        },
-    });
+    let LastEvaluatedKey: Record<string, AttributeValue>;
+    const users: RetentionRow[] = [];
 
-    const users = periodUsers.Items.map((user): RetentionRow => ({
-        periodId: user.UserIdPeriod.S,
-        periodUserId: user.UserId.S,
-        visitInitial: DateTime.fromISO(user.VisitInitial.S),
-        visitsPrior: user.VisitsPrior?.SS.map((visit) => DateTime.fromISO(visit)) ?? [],
-        visitLatest: DateTime.fromISO(user.VisitLatest.S),
-        requestCount: parseInt(user.RequestCount.N),
-    }));
+    do {
+        const periodUsers = await clientDDB.query({
+            TableName: tableNameUsers,
+            IndexName: "RetentionForPeriod",
+            KeyConditionExpression: "PeriodId = :periodId",
+            ExpressionAttributeValues: {
+                ":periodId": {S: periodPrev.periodId},
+            },
+            ExclusiveStartKey: LastEvaluatedKey
+        });
 
+        users.push(...periodUsers.Items.map((user): RetentionRow => ({
+            periodId: user.UserIdPeriod.S,
+            periodUserId: user.UserId.S,
+            visitInitial: DateTime.fromISO(user.VisitInitial.S),
+            visitsPrior: user.VisitsPrior?.SS.map((visit) => DateTime.fromISO(visit)) ?? [],
+            visitLatest: DateTime.fromISO(user.VisitLatest.S),
+            requestCount: -1, // not included in GSI
+        })));
+
+        LastEvaluatedKey = periodUsers.LastEvaluatedKey;
+    } while (LastEvaluatedKey);
+
+    console.log(`Loaded ${users.length} users from previous period`);
     return users;
 }
 
@@ -141,6 +158,10 @@ async function getAccessLogs(
     return results.flat();
 }
 
+const DEFAULT_TZ = process.env.TZ !== ":UTC"
+    ? process.env.TZ
+    : 'America/Chicago';
+
 export async function handler(event) {
     const config = {
         tableNamePeriods: process.env.DYNAMODB_TABLE_PERIODS || "retainless-db-periods",
@@ -156,11 +177,14 @@ export async function handler(event) {
                 :  Duration.fromDurationLike({ hours: 2 }),
 
         periodExpiration: Number(process.env.PERIOD_EXPIRATION) || 30,
-        periodEnd: event.periodEnd ? DateTime.fromISO(event.periodEnd) : DateTime.now(),
+        periodEnd: event.periodEnd
+            ? DateTime.fromISO(event.periodEnd, { zone: DEFAULT_TZ })
+            : DateTime.local({ zone: DEFAULT_TZ }).startOf('day'),
     };
 
+    console.log(JSON.stringify(config));
     console.log(`Loading previous periods`);
-    const periodsPrev = await getRetainedPeriods(config.tableNamePeriods);
+    const periodsPrev = await getRetainedPeriods(config.tableNamePeriods, config.applicationId);
 
     const appSecret = `todo-secretsmanager-AWSCURRENT`;
     const appSecretVersion = "$res.SecretVersion";
@@ -174,10 +198,11 @@ export async function handler(event) {
         ? await getRetentionUsers(periodsPrev[0], config.tableNameUsers)
         : [];
 
-    const periodSK = config.periodEnd.toISO();
+    const periodSK = config.periodEnd.setZone('UTC').toISO();
     const periodId = `${config.applicationId}-${periodSK}`;
+    const periodExpires = config.periodEnd.plus({ day: config.periodExpiration });
 
-    console.log(`Getting access logs for ${periodStart.toISO()} to ${config.periodEnd.toISO()}`);
+    console.log(`Getting access logs for ${periodStart.toSQL()} to ${config.periodEnd.toSQL()}`);
     const accessLogs = await getAccessLogs(config.logGroupArn, periodStart, config.periodEnd, config.logStreamName ? [
         `filter @logStream = '${config.logStreamName}'`
     ] : [], config.logMaxDuration);
@@ -197,7 +222,7 @@ export async function handler(event) {
                 Item: {
                     ApplicationId: { S: config.applicationId },
                     PeriodEnd: { S: periodSK },
-                    PeriodExpires: { N: `${config.periodEnd.plus({ day: config.periodExpiration }).toUnixInteger()}` },
+                    PeriodExpires: { N: periodExpires.toUnixInteger().toString() },
                     PeriodSalt: { S: periodSalt },
                     SecretVersion: { S: appSecretVersion },
                 }
@@ -213,11 +238,11 @@ export async function handler(event) {
                 PeriodId: {S: periodId},
                 UserId: {S: user.periodUserId},
                 UserIdPeriod: {S: user.periodId},
-                VisitInitial: {S: user.visitInitial.toISO()},
+                VisitInitial: {S: user.visitInitial.setZone('UTC').toISO()},
                 ...(user.visitsPrior.length > 0 ? {
-                    VisitsPrior: {SS: user.visitsPrior.map((visit) => visit.toISO())},
+                    VisitsPrior: {SS: user.visitsPrior.map((visit) => visit.setZone('UTC').toISO())},
                 } : {}),
-                VisitLatest: {S: user.visitLatest.toISO()},
+                VisitLatest: {S: user.visitLatest.setZone('UTC').toISO()},
                 RequestCount: {N: user.requestCount.toString()},
             }
         }
@@ -229,6 +254,8 @@ export async function handler(event) {
             TransactItems: batch
         });
     }
+
+    console.log(`Done!`);
 }
 
 if (!process.env.ESBUILD) {

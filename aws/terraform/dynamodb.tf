@@ -27,8 +27,8 @@ resource "aws_dynamodb_table" "users" {
 
   billing_mode = "PAY_PER_REQUEST"
 
-  hash_key = "PeriodId"
-  range_key = "UserId"
+  hash_key = "UserId"
+  range_key = "PeriodId"
 
   attribute {
     name = "PeriodId"
@@ -38,5 +38,17 @@ resource "aws_dynamodb_table" "users" {
   attribute {
     name = "UserId"
     type = "S"
+  }
+
+  global_secondary_index {
+    hash_key = "PeriodId"
+    name = "RetentionForPeriod"
+    projection_type = "INCLUDE"
+    non_key_attributes = [
+      "UserId",
+      "UserIdPeriod",
+      "VisitInitial",
+      "VisitLatest"
+    ]
   }
 }
