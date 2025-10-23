@@ -1,21 +1,18 @@
 import "jest";
-import {AccessLogRow, getUserId, processLogs, RetentionRow} from "../Processor";
+import {AccessLogRow, getUserId, processLogs, RetentionRow} from "../Processor.js";
 import {DateTime} from "luxon";
 
-declare module 'luxon' {
-    interface TSSettings {
-        throwOnInvalid: true
-    }
-}
+import '../../LuxonConfigure.js';
 
 describe("Processor", () => {
     const config: Parameters<typeof processLogs>[2] = {
         appSecret: "appSecret",
         periodSalt: "periodSalt",
         periodId: "B",
+        periodEnd: "2025-10-02T00:00:00.000Z",
         retainedPeriods: [{
             periodId: "A",
-            periodEnd: DateTime.fromISO("2025-12-31T00:00:00.000Z"),
+            periodEnd: "2025-10-01T00:00:00.000Z",
             appSecretPrev: "appSecretPrev",
             periodSaltPrev: "periodSaltPrev",
         }],
@@ -39,10 +36,11 @@ describe("Processor", () => {
 
         expect(result).toMatchObject([{
             periodId: "B",
-            periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
-            firstSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),
+            userId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
+            periodEnd: "2025-10-02T00:00:00.000Z",
+            visitsPrior: [],
             requestCount: 2,
+            sessionLength: 60,
         }]);
     });
 
@@ -60,20 +58,22 @@ describe("Processor", () => {
         }];
         const retainedUsers: RetentionRow[] = [{
             periodId: "B",
-            periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
-            firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-12-30T07:01:00.000Z"),
+            userId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
+            periodEnd: "2025-10-02T00:00:00.000Z",
+            visitsPrior: [],
             requestCount: 4,
+            sessionLength: 60,
         }];
 
         const result = await processLogs(accessLog, retainedUsers, config);
 
         expect(result).toMatchObject([{
             periodId: "B",
-            periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
-            firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),
+            userId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
+            periodEnd: "2025-10-02T00:00:00.000Z",
+            visitsPrior: [],
             requestCount: 2,
+            sessionLength: 60,
         }]);
     });
 
@@ -91,26 +91,33 @@ describe("Processor", () => {
         }];
         const retainedUsers: RetentionRow[] = [{
             periodId: "A",
-            periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
-            firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-12-30T07:01:00.000Z"),
+            userId: await getUserId("0.0.0.0", "Firefox", "appSecretPrev", "periodSaltPrev"),
+            periodEnd: "2025-10-01T00:00:00.000Z",
+            visitsPrior: [],
             requestCount: 4,
+            sessionLength: 60,
         }];
 
         const result = await processLogs(accessLog, retainedUsers, config);
 
         expect(result).toMatchObject([{
             periodId: "B",
-            periodUserId: await getUserId("1.1.1.1", "Chrome", "appSecret", "periodSalt"),
-            firstSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-01-02T11:01:00.000Z"),
+            userId: await getUserId("1.1.1.1", "Chrome", "appSecret", "periodSalt"),
+            periodEnd: "2025-10-02T00:00:00.000Z",
+            visitsPrior: [],
             requestCount: 1,
+            sessionLength: 0,
         }, {
             periodId: "B",
-            periodUserId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
-            firstSeen: DateTime.fromISO("2025-12-28T06:01:00.000Z"),
-            lastSeen: DateTime.fromISO("2025-01-02T11:02:00.000Z"),
+            userId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
+            periodEnd: "2025-10-02T00:00:00.000Z",
+            visitsPrior: [{
+                periodEnd: "2025-10-01T00:00:00.000Z",
+                requestCount: 4,
+                sessionLength: 60,
+            }],
             requestCount: 1,
+            sessionLength: 0,
         }]);
     });
 });

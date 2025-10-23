@@ -3,21 +3,21 @@ resource "aws_dynamodb_table" "periods" {
 
   billing_mode = "PAY_PER_REQUEST"
 
-  hash_key = "ApplicationId"
-  range_key = "PeriodEnd"
+  hash_key = "applicationId"
+  range_key = "periodEnd"
 
   attribute {
-    name = "ApplicationId"
+    name = "applicationId"
     type = "S"
   }
 
   attribute {
-    name = "PeriodEnd"
+    name = "periodEnd"
     type = "S"
   }
 
   ttl {
-    attribute_name = "PeriodExpires"
+    attribute_name = "periodExpires"
     enabled = true
   }
 }
@@ -27,28 +27,22 @@ resource "aws_dynamodb_table" "users" {
 
   billing_mode = "PAY_PER_REQUEST"
 
-  hash_key = "UserId"
-  range_key = "PeriodId"
+  hash_key = "userId"
+  range_key = "periodId"
 
   attribute {
-    name = "PeriodId"
+    name = "periodId"
     type = "S"
   }
 
   attribute {
-    name = "UserId"
+    name = "userId"
     type = "S"
   }
 
   global_secondary_index {
-    hash_key = "PeriodId"
+    hash_key = "periodId"
     name = "RetentionForPeriod"
-    projection_type = "INCLUDE"
-    non_key_attributes = [
-      "UserId",
-      "UserIdPeriod",
-      "VisitInitial",
-      "VisitLatest"
-    ]
+    projection_type = "ALL"
   }
 }

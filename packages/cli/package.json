@@ -1,0 +1,26 @@
+{
+  "name": "@retainless/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "RetainlessCLI.ts",
+  "bin": {
+    "retainless": "build/RetainlessCLI.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "retainless": "tsx RetainlessCLI.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.4",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.908.0",
+    "commander": "^14.0.1",
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1"
+  }
+}

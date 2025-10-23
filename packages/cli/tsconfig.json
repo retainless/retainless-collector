@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "build",
+    "noEmit": false
+  },
+  "references": [
+    { "path":  "../log-processor" }
+  ]
+}

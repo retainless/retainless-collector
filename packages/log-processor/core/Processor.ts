@@ -5,7 +5,7 @@ Settings.throwOnInvalid = true;
 
 export interface Period {
     periodId: string;
-    periodEnd: DateTime;
+    periodEnd: string;
     appSecretPrev: string;
     periodSaltPrev: string;
 }
@@ -13,17 +13,21 @@ export interface Period {
 export interface AccessLogRow {
     ipAddress: string;
     userAgent: string;
-    date: DateTime;
+    date: DateTime<true>;
     path: string;
 }
 
 export interface RetentionRow {
     periodId: string;
-    periodUserId: string;
-    visitInitial: DateTime;
-    visitsPrior: DateTime[];
-    visitLatest: DateTime;
+    userId: string;
+    periodEnd: string;
+    visitsPrior: Array<{
+        periodEnd: string;
+        requestCount: number;
+        sessionLength: number;
+    }>
     requestCount: number;
+    sessionLength: number
 }
 
 export async function getUserId(
@@ -44,7 +48,8 @@ export async function processLogs(
     config = {
         appSecret: "current",
         periodSalt: "current",
-        periodId: DateTime.now().toISO(),
+        periodId: "current",
+        periodEnd: DateTime.now().toISO(),
         retainedPeriods: <Period[]>[],
     },
 ): Promise<RetentionRow[]> {
@@ -53,10 +58,7 @@ export async function processLogs(
         const isPeriodHashable = !!config.retainedPeriods.find(period => period.periodId === user.periodId);
 
         if (isPeriodHashable) {
-            retainedUsersByUserId.set(user.periodUserId, {
-                ...user,
-                requestCount: 0,
-            });
+            retainedUsersByUserId.set(user.userId, user);
         }
     }
 
@@ -77,11 +79,16 @@ export async function processLogs(
         accessLogsByUserId.get(userId)!.push(log);
     }
 
-    for (const [periodUserId, logs] of accessLogsByUserId) {
+    const newUsers = <RetentionRow[]>[];
+    for (const [userId, logs] of accessLogsByUserId) {
         const dates = logs.map(log => log.date);
-        const lastSeen = DateTime.max(...dates) as DateTime;
 
-        let existingUser: RetentionRow;
+        const firstSeen = DateTime.min(...dates)!;
+        const lastSeen = DateTime.max(...dates)!;
+
+        const sessionLength = lastSeen.diff(firstSeen, 'seconds').seconds;
+
+        let existingUser: RetentionRow | undefined = undefined;
         for (const period of config.retainedPeriods) {
             const previousUserId = await getUserId(
                 logs[0].ipAddress,
@@ -97,27 +104,29 @@ export async function processLogs(
         }
 
         if (existingUser) {
-            retainedUsersByUserId.set(existingUser.periodUserId, {
+            newUsers.push({
                 periodId: config.periodId,
-                periodUserId,
-                visitInitial: existingUser.visitInitial,
-                visitsPrior: [...existingUser.visitsPrior, existingUser.visitLatest],
-                visitLatest: lastSeen,
+                userId,
+                periodEnd: config.periodEnd,
+                visitsPrior: [...existingUser.visitsPrior, {
+                    periodEnd: existingUser.periodEnd,
+                    requestCount: existingUser.requestCount,
+                    sessionLength: existingUser.sessionLength,
+                }],
                 requestCount: logs.length,
+                sessionLength,
             })
         } else {
-            const firstSeen = DateTime.min(...dates) as DateTime;
-
-            retainedUsersByUserId.set(periodUserId, {
+            newUsers.push({
                 periodId: config.periodId,
-                periodUserId,
-                visitInitial: firstSeen,
+                userId,
+                periodEnd: config.periodEnd,
                 visitsPrior: [],
-                visitLatest: lastSeen,
                 requestCount: logs.length,
+                sessionLength
             });
         }
     }
 
-    return [...retainedUsersByUserId.values()];
+    return newUsers;
 }

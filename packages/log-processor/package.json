@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "description": "",
-  "main": "index.js",
+  "main": "build/core/Processor.js",
   "scripts": {
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
+    "build:core": "tsc",
+    "build:lambda": "node aws/build.js",
+    "build": "npm run build:core && npm run build:lambda",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
   },
   "keywords": [],
   "author": "",
