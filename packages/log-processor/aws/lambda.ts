@@ -6,6 +6,7 @@ import {DDBPeriod, getRetainedPeriods} from "./Periods.js";
 import {DDBUser, getRetentionUsers} from "./RetainedUsers.js";
 import {getAccessLogs} from "./AccessLogs.js";
 import {CloudWatchLogs} from "@aws-sdk/client-cloudwatch-logs";
+import {mapLimit} from "async";
 
 const DEFAULT_TZ = process.env.TZ !== ":UTC"
     ? process.env.TZ
@@ -83,47 +84,56 @@ export async function handler(event: ILogProcessorEvent) {
         periodId: {S: periodId},
         userId: {S: user.userId},
         periodEnd: {S: periodSK},
-        visitsPrior: user.visitsPrior.length === 0 ? undefined : {
-            L: user.visitsPrior.map((visit) => ({
-                M: {
-                    periodEnd: { S: visit.periodEnd },
-                    requestCount: { N: visit.requestCount.toString() },
-                    sessionLength: { N: visit.sessionLength.toString() },
-                }
-            }))
-        },
+        ...(user.visitsPrior.length > 0 ? {
+            visitsPrior: {
+                L: user.visitsPrior.map((visit) => ({
+                    M: {
+                        periodId: { S: visit.periodId },
+                        periodEnd: { S: visit.periodEnd },
+                        requestCount: { N: visit.requestCount.toString() },
+                        sessionLength: { N: visit.sessionLength.toString() },
+                    }
+                }))
+            },
+        } : {}),
         requestCount: {N: user.requestCount.toString()},
         sessionLength: {N: user.sessionLength.toString()}
     }));
 
-    console.log(`Writing period to DynamoDB`);
-    await clientDDB.transactWriteItems({
-        TransactItems: [{
-            Put: {
-                TableName: config.tableNamePeriods,
-                Item: PeriodItem,
-            }
-        }]
-    });
-
     console.log(`Writing ${retainedUsers.length} users to DynamoDB`);
-    for (let i = 0; i < TransactItems.length; i += 100) {
-        const batch = TransactItems.slice(i, i + 100);
-        await clientDDB.transactWriteItems({
-            TransactItems: batch.map((Item) => ({
-                Put: {
-                    TableName: config.tableNameUsers,
-                    Item,
-                }
-            }))
-        });
+    let WCUsConsumed = 0;
+    const chunks = [];
+    for (let i = 0; i < TransactItems.length; i += 25) {
+        chunks.push(TransactItems.slice(i, i + 25));
     }
 
+    await mapLimit(chunks, 5, async (chunk: DDBUser[]) => {
+        await clientDDB.batchWriteItem({
+            RequestItems: {
+                [config.tableNameUsers]: chunk.map((Item) => ({
+                    PutRequest: {Item}
+                }))
+            },
+            ReturnConsumedCapacity: "TOTAL",
+        }).then((r) => WCUsConsumed += r.ConsumedCapacity?.[0]?.CapacityUnits ?? 0);
+    });
+
+    console.log(`Writing period to DynamoDB`);
+    await clientDDB.batchWriteItem({
+        RequestItems: {
+            [config.tableNamePeriods]: [{
+                PutRequest: { Item: PeriodItem },
+            }]
+        },
+        ReturnConsumedCapacity: "TOTAL",
+    }).then((r) => WCUsConsumed += r.ConsumedCapacity?.[0]?.CapacityUnits ?? 0);
+
+    console.log(`Consumed ${WCUsConsumed} WCUs`);
     console.log(`Done!`);
 }
 
 if (!process.env.ESBUILD) {
     await handler({
-        periodEnd: "2025-10-22"
+        periodEnd: "2025-10-24"
     });
 }

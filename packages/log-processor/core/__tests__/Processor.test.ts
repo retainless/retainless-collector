@@ -112,6 +112,7 @@ describe("Processor", () => {
             userId: await getUserId("0.0.0.0", "Firefox", "appSecret", "periodSalt"),
             periodEnd: "2025-10-02T00:00:00.000Z",
             visitsPrior: [{
+                periodId: "A",
                 periodEnd: "2025-10-01T00:00:00.000Z",
                 requestCount: 4,
                 sessionLength: 60,

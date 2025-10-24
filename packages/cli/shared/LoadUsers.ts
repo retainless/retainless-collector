@@ -1,50 +1,106 @@
-import {AttributeValue, DynamoDB, QueryCommandOutput} from "@aws-sdk/client-dynamodb";
+import {AttributeValue, DynamoDB, QueryCommandOutput, ScanOutput} from "@aws-sdk/client-dynamodb";
 import type {DDBUser} from "../../log-processor/aws/RetainedUsers.js";
 import * as process from "node:process";
+import {DateTime} from "luxon";
+import {CLIOptions} from "./CLIOptions.js";
 
 const clientDDB = new DynamoDB();
 
-export async function loadUsers(periodId: string) {
-    // todo- recursively fill periods based on existince in `priorVisit` lists
-    const periodsToSearch = [
-        "retainless-app-2025-10-08T05:00:00.000Z",
-        "retainless-app-2025-10-09T05:00:00.000Z",
-        "retainless-app-2025-10-10T05:00:00.000Z",
-        "retainless-app-2025-10-11T05:00:00.000Z",
-        "retainless-app-2025-10-12T05:00:00.000Z",
-        "retainless-app-2025-10-13T05:00:00.000Z",
-        "retainless-app-2025-10-14T05:00:00.000Z",
-        "retainless-app-2025-10-15T05:00:00.000Z",
-        "retainless-app-2025-10-16T05:00:00.000Z",
-        "retainless-app-2025-10-17T05:00:00.000Z",
-        "retainless-app-2025-10-18T05:00:00.000Z",
-        "retainless-app-2025-10-19T05:00:00.000Z",
-        "retainless-app-2025-10-20T05:00:00.000Z",
-        "retainless-app-2025-10-21T05:00:00.000Z",
-        "retainless-app-2025-10-22T05:00:00.000Z"
-    ]
+interface ISearchPeriod {
+    periodId: string;
+    periodEnd: DateTime;
+}
+
+export async function loadPeriods() {
+    let LastEvaluatedKey: Record<string, AttributeValue> | undefined = undefined;
+
+    const periods = new Set<ISearchPeriod>();
+    do {
+        const lastScan: ScanOutput = await clientDDB.scan({
+            TableName: "retainless-db-users",
+            IndexName: "RetentionForPeriod",
+            ProjectionExpression: "periodId,periodEnd",
+            Limit: 1,
+            ExclusiveStartKey: LastEvaluatedKey
+        });
+
+        if (lastScan.Items?.[0]?.periodId?.S && lastScan.Items?.[0]?.periodEnd?.S) {
+            periods.add({
+                periodId: lastScan.Items[0].periodId.S,
+                periodEnd: DateTime.fromISO(lastScan.Items[0].periodEnd.S),
+            });
+        }
+
+        // https://aws.amazon.com/blogs/database/generate-a-distinct-set-of-partition-keys-for-an-amazon-dynamodb-table-efficiently/
+        LastEvaluatedKey = lastScan.LastEvaluatedKey ? {
+            periodId: lastScan.LastEvaluatedKey.periodId,
+            userId: { S: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" }
+        } : undefined;
+    } while (LastEvaluatedKey)
+
+    return [...periods].sort((a, b) => a.periodEnd.toMillis() - b.periodEnd.toMillis());
+}
+
+export async function loadUsers(
+    options: CLIOptions,
+): Promise<DDBUser[]> {
+    const config = {
+        start: DateTime.fromISO(options.start),
+        end: DateTime.fromISO(options.end),
+    }
+
+    const periodsToSearch = await loadPeriods();
+
+    const usersByPeriod = new Map<string, DDBUser[] | null>();
+    for (const period of periodsToSearch) {
+        if (period.periodEnd >= config.start && period.periodEnd < config.end) {
+            usersByPeriod.set(period.periodId, null);
+        }
+    }
+
+    if (usersByPeriod.size === 0) {
+        throw new Error("Range does not include any users");
+    }
 
     process.stderr.write(`Loading periods`);
-    let users = <DDBUser[]>[];
-    for (const periodId of periodsToSearch) {
-        process.stderr.write('.');
-        let LastEvaluatedKey: Record<string, AttributeValue> | undefined = undefined;
-        do {
-            const response: QueryCommandOutput = await clientDDB.query({
-                TableName: "retainless-db-users",
-                IndexName: "RetentionForPeriod",
-                KeyConditionExpression: "periodId = :periodId",
-                ExpressionAttributeValues: {
-                    ":periodId": {S: periodId},
-                },
-                ExclusiveStartKey: LastEvaluatedKey
-            });
 
-            if (response.Items) {
-                users.push(...response.Items as DDBUser[]);
-            }
-            LastEvaluatedKey = response.LastEvaluatedKey;
-        } while (LastEvaluatedKey);
+    let unfilledPeriods = <string[]>[];
+    while ((unfilledPeriods = [...usersByPeriod.entries()]
+        .filter(([,v]) => v === null)
+        .map(([k]) => k)) && unfilledPeriods.length) {
+        for (const periodId of unfilledPeriods) {
+            process.stderr.write('.');
+            let users = <DDBUser[]>[];
+            let LastEvaluatedKey: Record<string, AttributeValue> | undefined = undefined;
+            do {
+                const response: QueryCommandOutput = await clientDDB.query({
+                    TableName: "retainless-db-users",
+                    IndexName: "RetentionForPeriod",
+                    KeyConditionExpression: "periodId = :periodId",
+                    ExpressionAttributeValues: {
+                        ":periodId": {S: periodId},
+                    },
+                    ExclusiveStartKey: LastEvaluatedKey
+                });
+
+                if (response.Items) {
+                    for (const Item of response.Items) {
+                        const user = Item as DDBUser;
+                        if (user.visitsPrior) {
+                            for (const visitPrior of user.visitsPrior.L) {
+                                if (!usersByPeriod.has(visitPrior.M.periodId.S)) {
+                                    usersByPeriod.set(visitPrior.M.periodId.S, null);
+                                }
+                            }
+                        }
+                        users.push(user);
+                    }
+                }
+                LastEvaluatedKey = response.LastEvaluatedKey;
+            } while (LastEvaluatedKey);
+
+            usersByPeriod.set(periodId, users);
+        }
     }
     process.stderr.write('\n');
 
@@ -73,5 +129,5 @@ export async function loadUsers(periodId: string) {
     }
     */
 
-    return users;
+    return [...usersByPeriod.values()].flatMap(v => v !== null ? v : []);
 }

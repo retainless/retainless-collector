@@ -9,6 +9,7 @@ export type DDBUser = _DDBDocUser<{
     visitsPrior?: {
         L: {
             M: {
+                periodId: { S: string; }
                 periodEnd: { S: string };
                 requestCount: { N: string };
                 sessionLength: { N: string };
@@ -46,6 +47,7 @@ export async function getRetentionUsers(
                 userId: user.userId.S,
                 periodEnd: user.periodEnd.S,
                 visitsPrior: user.visitsPrior?.L.map((visit) => ({
+                    periodId: visit.M.periodId.S,
                     periodEnd: visit.M.periodEnd.S,
                     requestCount: Number(visit.M.requestCount.N),
                     sessionLength: Number(visit.M.sessionLength.N),

@@ -1,11 +1,14 @@
 import {DateTime} from "luxon";
 import {loadUsers} from "../shared/LoadUsers.js";
 import {Command} from "commander";
+import {CLIOptions} from "../shared/CLIOptions.js";
+
 
 import '../LuxonConfigure.js';
 
-export async function dailyChurnRate() {
-    const users = await loadUsers('tbd');
+export async function dailyChurnRate(_: unknown, command: Command) {
+    const options = command.optsWithGlobals<CLIOptions>();
+    const users = await loadUsers(options);
     const visitorsByCohort = new Map<string, number[]>();
 
     for (const user of users) {
@@ -41,10 +44,10 @@ export async function dailyChurnRate() {
 
     const sortedVisitorsByCohort = [...visitorsByCohort.entries()]
         .sort(([a], [b]) => a.localeCompare(b));
-    console.log('CohortDay,DayOffset,UsersSurviving,CohortSize');
+    console.log('CohortDay,DayOffset,UsersSurviving,PoolSize,CohortSize');
     for (const [cohortDay, usersReturnedByOffset] of sortedVisitorsByCohort) {
         for (let i = 0; i < usersReturnedByOffset.length; i++) {
-            console.log(`${cohortDay},${i},${usersReturnedByOffset[i]},${usersReturnedByOffset[Math.max(0, i-1)]}`);
+            console.log(`${cohortDay},${i},${usersReturnedByOffset[i]},${usersReturnedByOffset[Math.max(0, i-1)]},${usersReturnedByOffset[0]}`);
         }
     }
 }
@@ -60,20 +63,16 @@ their first visit and their last visit.
 
 Example output:
 
-CohortDay,DayOffset,UsersSurviving,CohortSize
-2025-10-08,0,100,100
-2025-10-08,1,25,100
-2025-10-08,2,22,25
-2025-10-08,3,20,22
-2025-10-08,4,18,20
-2025-10-09,0,100,100
-2025-10-09,1,25,100
-2025-10-09,2,20,25
-2025-10-09,3,16,20
+CohortDay,DayOffset,UsersSurviving,PoolSize,CohortSize
+2025-10-08,0,100,100,100
+2025-10-08,1,25,100,100
+2025-10-08,2,22,25,100
+2025-10-08,3,20,22,100
+2025-10-08,4,18,20,100
+2025-10-09,0,100,100,100
+2025-10-09,1,25,100,100
+2025-10-09,2,20,25,100
+2025-10-09,3,16,20,100
 `.trim());
 
 DailyChurnRateCLI.action(dailyChurnRate);
-
-if (import.meta.url.endsWith(process.argv[1]!)) {
-    await DailyChurnRateCLI.parseAsync(process.argv);
-}

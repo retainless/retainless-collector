@@ -42,6 +42,7 @@ resource "aws_dynamodb_table" "users" {
 
   global_secondary_index {
     hash_key = "periodId"
+    range_key = "userId"
     name = "RetentionForPeriod"
     projection_type = "ALL"
   }

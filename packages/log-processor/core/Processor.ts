@@ -22,6 +22,7 @@ export interface RetentionRow {
     userId: string;
     periodEnd: string;
     visitsPrior: Array<{
+        periodId: string;
         periodEnd: string;
         requestCount: number;
         sessionLength: number;
@@ -109,6 +110,7 @@ export async function processLogs(
                 userId,
                 periodEnd: config.periodEnd,
                 visitsPrior: [...existingUser.visitsPrior, {
+                    periodId: existingUser.periodId,
                     periodEnd: existingUser.periodEnd,
                     requestCount: existingUser.requestCount,
                     sessionLength: existingUser.sessionLength,
