@@ -6,7 +6,7 @@ import {CLIOptions} from "../shared/CLIOptions.js";
 
 import '../LuxonConfigure.js';
 
-export async function dailyChurnRate(_: unknown, command: Command) {
+export async function dailyChurn(_: unknown, command: Command) {
     const options = command.optsWithGlobals<CLIOptions>();
     const users = await loadUsers(options);
     const visitorsByCohort = new Map<string, number[]>();
@@ -52,11 +52,11 @@ export async function dailyChurnRate(_: unknown, command: Command) {
     }
 }
 
-export const DailyChurnRateCLI = new Command('daily-churn-rate');
-DailyChurnRateCLI.summary("survival rate of users based on their first visit");
+export const DailyChurnCLI = new Command('daily-churn');
+DailyChurnCLI.summary("survival rate of users based on their first visit");
 
 // language=markdown
-DailyChurnRateCLI.description(`
+DailyChurnCLI.description(`
 Survival rate (or fall-off rate) is the number of users who still find your site
 useful after a specified number of days, as measured by the duration between
 their first visit and their last visit.
@@ -75,4 +75,4 @@ CohortDay,DayOffset,UsersSurviving,PoolSize,CohortSize
 2025-10-09,3,16,20,100
 `.trim());
 
-DailyChurnRateCLI.action(dailyChurnRate);
+DailyChurnCLI.action(dailyChurn);
