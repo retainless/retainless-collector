@@ -187,8 +187,9 @@ it:
 
 ## Contributing
 
-If you know of ways to improve Retainless Architecture or code, please [reach out](mailto:hank@retainless.com) or
-[raise an Issue](https://github.com/retainless/retainless-collector/issues) or Pull Request!
+If you know of ways to improve Retainless architecture or code, please [reach out](mailto:hank@retainless.com) or
+[raise an Issue](https://github.com/retainless/retainless-collector/issues) or Pull Request! For questions that aren't
+improvement-related, start a [Discussion](https://github.com/orgs/retainless/discussions).
 
 **Thank you :)**
 
