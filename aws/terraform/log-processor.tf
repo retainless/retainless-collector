@@ -1,5 +1,5 @@
 data "http" "log_processor" {
-  url = "https://github.com/retainless/retainless-collector/releases/download/v0.1.0-rc1/aws.zip"
+  url = "https://github.com/retainless/retainless-collector/releases/download/v0.1.0/aws.zip"
 
   lifecycle {
     postcondition {
