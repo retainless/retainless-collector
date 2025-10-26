@@ -1,7 +1,17 @@
-data "archive_file" "log_processor" {
-  type = "zip"
-  output_path = "${path.cwd}/build/log-processor-aws.zip"
-  source_dir = "${path.module}/../../packages/log-processor/build/aws/bundled"
+data "http" "log_processor" {
+  url = "https://github.com/retainless/retainless-collector/releases/download/v0.1.0-rc1/aws.zip"
+
+  lifecycle {
+    postcondition {
+      condition = contains([200], self.status_code)
+      error_message = "Status code invalid"
+    }
+  }
+}
+
+resource "local_file" "log_processor" {
+  content_base64 = data.http.log_processor.response_body_base64
+  filename = "${path.cwd}/build/aws-log-processor.zip"
 }
 
 resource "aws_cloudwatch_log_group" "log_processor" {
@@ -18,8 +28,8 @@ resource "aws_lambda_function" "log_processor" {
   function_name = "retainless-log-processor"
   role = aws_iam_role.retainless.arn
 
-  filename = data.archive_file.log_processor.output_path
-  source_code_hash = data.archive_file.log_processor.output_base64sha256
+  filename = local_file.log_processor.filename
+  source_code_hash = local_file.log_processor.content_sha256
   runtime = "nodejs22.x"
   handler = "lambda.handler"
   timeout = 300

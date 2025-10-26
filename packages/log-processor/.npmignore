@@ -2,3 +2,4 @@ jest.config.js
 **/__tests__/**
 
 build.js
+build/bundles

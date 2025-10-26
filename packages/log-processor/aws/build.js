@@ -1,5 +1,6 @@
 import * as Esbuild from "esbuild";
 import * as Path from "node:path";
+import * as ChildProcess from "node:child_process";
 
 await Esbuild.build({
     platform: "node",
@@ -20,6 +21,11 @@ await Esbuild.build({
     minify: false,
     splitting: true,
     treeShaking: true,
-    outdir: Path.join(import.meta.dirname, '..', 'build', 'aws', 'bundled'),
+    outdir: Path.join(import.meta.dirname, '..', 'build', 'bundles', 'aws'),
     logLevel: 'info'
 });
+
+ChildProcess.execSync("zip -FS ../aws.zip *", {
+    cwd: Path.join(import.meta.dirname, '..', 'build', 'bundles', 'aws'),
+    stdio: "inherit",
+})
