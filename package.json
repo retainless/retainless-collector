@@ -7,7 +7,7 @@
   "version": "0.1.0",
   "description": "Workspace for Retainless: Privacy-first app analytics that matter",
   "homepage": "https://retainless.com",
-  "license": "MIT",
+  "license": "LGPL-3.0-only",
   "author": {
     "name": "Hank Brekke-Peer",
     "url": "https://hank.brekke-peer.com",
