@@ -20,6 +20,6 @@ await Esbuild.build({
     minify: false,
     splitting: true,
     treeShaking: true,
-    outdir: Path.join(import.meta.dirname, '..', '..', '..', 'build', 'log-processor-aws'),
+    outdir: Path.join(import.meta.dirname, '..', 'build', 'aws', 'bundled'),
     logLevel: 'info'
 });

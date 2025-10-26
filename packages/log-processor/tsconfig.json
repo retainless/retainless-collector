@@ -6,6 +6,7 @@
     "noEmit": false
   },
   "exclude": [
-    "**/__tests__"
+    "**/__tests__",
+    "build/**"
   ]
 }

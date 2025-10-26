@@ -1,18 +1,44 @@
 {
   "name": "@retainless/log-processor",
-  "version": "1.0.0",
-  "type": "module",
-  "description": "",
+  "version": "0.1.0",
+  "description": "Access log processor for Retainless: Privacy-first app analytics that matter",
+  "homepage": "https://retainless.com",
+  "license": "MIT",
+  "author": {
+    "name": "Hank Brekke-Peer",
+    "url": "https://hank.brekke-peer.com",
+    "email": "hank@retainless.com"
+  },
+  "keywords": [
+    "analytics",
+    "serverless",
+    "privacy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retainless/retainless-collector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/retainless/retainless-collector/issues"
+  },
+  "funding": {
+    "url": "https://retainless.com"
+  },
+  "publishConfig": {
+    "access": "public",
+    "@retainless:registry": "https://npm.pkg.github.com"
+  },
   "main": "build/core/Processor.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "build:core": "tsc",
     "build:lambda": "node aws/build.js",
     "build": "npm run build:core && npm run build:lambda",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.908.0",

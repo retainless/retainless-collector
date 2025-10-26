@@ -1,7 +1,7 @@
 data "archive_file" "log_processor" {
   type = "zip"
   output_path = "${path.cwd}/build/log-processor-aws.zip"
-  source_dir = "${path.module}/../../build/log-processor-aws"
+  source_dir = "${path.module}/../../packages/log-processor/build/aws/bundled"
 }
 
 resource "aws_cloudwatch_log_group" "log_processor" {
