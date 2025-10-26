@@ -20,6 +20,6 @@ DailyRetentionCLI.copyInheritedSettings(RetainlessCLI);
 RetainlessCLI.addCommand(WeeklyRetentionCLI);
 WeeklyRetentionCLI.copyInheritedSettings(RetainlessCLI);
 
-if (import.meta.url.endsWith(process.argv[1]!)) {
+if (import.meta.url.endsWith(process.argv[1]!) || process.argv[1]!.endsWith('/retainless')) {
     await RetainlessCLI.parseAsync(process.argv);
 }

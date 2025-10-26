@@ -7,12 +7,17 @@ account, and there is no tracking code and no cookies.
 
 ## retainless-collector
 
-This code is the core gathering agent for Retainless, running in your cloud account that processes and stores data. It
-can be deployed to [AWS](#install-aws) or [GCP](#install-gcp) and others coming soon, but
-the [Architecture](#architecture)
-is aligned between providers.
+This code is the core gathering agent for Retainless, running in your cloud account to process and store data. It can be
+deployed to [AWS](#install-aws) or [GCP](#install-gcp) and others coming soon. The [Architecture](#architecture) should
+match regardless of cloud provider.
 
-### Prepare
+### Getting Started
+
+1. **[Prepare](#prepare)**: Enabling access logs is the first step of using Retainless.
+1. **[Install](#install)**: Deploying the `retainless-collector` processing code will digest these logs.
+1. **[Analyze](#analyze)**: Use [Retainless Cloud](https://retainless.com) or the CLI to view your app metrics.
+
+#### Prepare
 
 Your app must log access requests to *CloudWatch Logs* or *GCP Cloud Logging*. For services that sample requests, they
 should be set to `100%` (all requests).
@@ -22,9 +27,9 @@ In general, we recommend a CDN, but cloud servers usually can be configured for 
 The retention period must be at least `2 days`, but you may want longer log storage in case an error requires you to
 reprocess access logs. Since access logs contain IP addresses, they are considered personal data, so shorter is better.
 
-### Install
+#### Install
 
-#### Install: AWS
+##### Install: AWS
 
 Terraform:
 
@@ -37,27 +42,83 @@ module "retainless" {
 }
 ```
 
-#### Install: GCP
+##### Install: GCP
 
 Coming soon!
 
-### Analyze
+#### Analyze
 
-#### Analyze: CLI
+##### Analyze: Retainless Cloud
 
+Sign up your team at [Retainless.com](https://www.retainless.com) for updates.
+
+##### Analyze: CLI
+
+To install `retainless` (CLI), you will need to
+[configure NPM for the GitHub registry](https://docs.github.com/articles/configuring-npm-for-use-with-github-package-registry/),
+which even for public packages requires a
+[Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
+(the new fine-grained tokens are not yet supported). Replace `GITHUB_TOKEN` with your `ghp_ABC` token:
 ```bash
-# first:
+echo '//npm.pkg.github.com/:_authToken=GITHUB_TOKEN' >> ~/.npmrc
 echo '@retainless:registry=https://npm.pkg.github.com' >> ~/.npmrc
 npm install -g @retainless/cli
 
-# then:
-retainless daily-churn --help
-retainless --start 2025-10-01 --end 2025-10-31 daily-churn > ~/Documents/DailyChurn.csv
+# to upgrade the CLI:
+npm install -g @retainless/cli@latest
 ```
 
-#### Analyze: Retainless Cloud
+Once installed, the CLI is easy to use, and includes `--help` command for more info:
 
-Sign up your team at [Retainless.com](https://www.retainless.com) for updates.
+```bash
+$ retainless --help
+Usage: retainless [options] [command]
+
+Options:
+  -s --start <string>  Earliest period (default: "2025-10-01")
+  -e --end <string>    Latest period (default: "2025-10-31")
+  -h, --help           display help for command
+
+Commands:
+  daily-churn          survival rate of users based on their first visit
+  daily-retention      daily retention rate of users
+  weekly-retention     weekly retention rate of users
+  help [command]       display help for command
+```
+
+Or for a specific metric:
+
+```bash
+$ retainless daily-churn --help
+Usage: retainless daily-churn [options]
+
+Survival rate (or fall-off rate) is the number of users who still find your site
+useful after a specified number of days, as measured by the duration between
+their first visit and their last visit.
+
+Example output:
+
+CohortDay,DayOffset,UsersSurviving,PoolSize,CohortSize
+2025-10-08,0,100,100,100
+2025-10-08,1,25,100,100
+2025-10-08,2,22,25,100
+2025-10-08,3,20,22,100
+2025-10-08,4,18,20,100
+2025-10-09,0,100,100,100
+2025-10-09,1,25,100,100
+2025-10-09,2,20,25,100
+2025-10-09,3,16,20,100
+
+Options:
+  -h, --help  display help for command
+```
+
+The output of a metric command is always a CSV file, and status is saved to `STDERR`, so you can pipe `STDOUT` to a file
+or other program:
+
+```bash
+retainless --start 2025-10-01 --end 2025-10-31 daily-churn > ~/Documents/DailyChurn.csv
+```
 
 ### Architecture
 
@@ -124,8 +185,12 @@ it:
       - Wit
         results.
 
-## Thank you :)
+## Contributing
 
-If you know of ways to improve Retainless Architecture or code, please reach out or raise an Issue or PR!
+If you know of ways to improve Retainless Architecture or code, please [reach out](mailto:hank@retainless.com) or
+[raise an Issue](https://github.com/retainless/retainless-collector/issues) or Pull Request!
 
--Hank
+**Thank you :)**
+
+-Hank Brekke-Peer  
+[hank@retainless.com](mailto:hank@retainless.com)
