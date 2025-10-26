@@ -46,6 +46,7 @@ resource "aws_lambda_function" "log_processor" {
       DYNAMODB_TABLE_USERS = aws_dynamodb_table.users.name,
       LOG_GROUP_ARN = var.log_group_arn,
       LOG_STREAM_NAME = var.log_stream_name,
+      TZ = var.timezone,
 
       # APPLICATION_ID = "retainless-app",
       # LOG_MAX_DURATION = "3600"
