@@ -44,6 +44,7 @@ resource "aws_iam_role_policy" "sync" {
           "dynamodb:Scan",
           "dynamodb:Query",
           "dynamodb:PutItem",
+          "dynamodb:BatchWriteItem"
         ],
         Resource = [
           aws_dynamodb_table.periods.arn,
