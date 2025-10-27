@@ -15,7 +15,8 @@ match regardless of cloud provider.
 
 1. **[Prepare](#prepare)**: Enabling access logs is the first step of using Retainless.
 1. **[Install](#install)**: Deploying the `retainless-collector` processing code will digest these logs.
-1. **[Analyze](#analyze)**: Use [Retainless Cloud](https://retainless.com) or the CLI to view your app metrics.
+1. **[Analyze](#analyze)**: Use [Retainless Cloud](https://retainless.com) or the [CLI](#analyze-cli) to view your app
+   metrics.
 
 #### Prepare
 
@@ -59,6 +60,7 @@ To install `retainless` (CLI), you will need to
 which even for public packages requires a
 [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)
 (the new fine-grained tokens are not yet supported). Replace `GITHUB_TOKEN` with your `ghp_ABC` token:
+
 ```bash
 echo '//npm.pkg.github.com/:_authToken=GITHUB_TOKEN' >> ~/.npmrc
 echo '@retainless:registry=https://npm.pkg.github.com' >> ~/.npmrc
@@ -182,8 +184,8 @@ it:
    To ensure accurate counts, queries include:
     - Periods between the `--start` and `--end` dates.
     - Any periods referenced by priorVisits.
-      - Wit
-        results.
+        - Wit
+          results.
 
 ## Contributing
 
