@@ -54,6 +54,9 @@ export async function processLogs(
         retainedPeriods: <Period[]>[],
     },
 ): Promise<RetentionRow[]> {
+    if (DateTime.now().toMillis() < DateTime.fromISO(config.periodEnd).toMillis()) {
+        throw new Error(`Period cannot be in the future. Currently ${config.periodEnd}`);
+    }
     if (config.retainedPeriods.length > 0) {
         // `retainedPeriods` should generally be pre-sorted, but double-check for the latest period.
         const latestPeriod = DateTime.max(...config.retainedPeriods.map(period => DateTime.fromISO(period.periodEnd)))!;
