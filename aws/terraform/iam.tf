@@ -34,6 +34,13 @@ resource "aws_iam_role_policy" "sync" {
       {
         Effect = "Allow",
         Action = [
+          "lambda:InvokeFunction"
+        ],
+        Resource = aws_lambda_function.log_processor.arn
+      },
+      {
+        Effect = "Allow",
+        Action = [
           "dynamodb:Scan",
           "dynamodb:Query",
           "dynamodb:PutItem",

@@ -21,11 +21,16 @@ export async function getAccessLogs(
     console.log(`Using query string:\n${queryString}`);
 
     const logGroupInfo = await clientCWL.describeLogGroups({
-        logGroupIdentifiers: [logGroupArn]
+        logGroupIdentifiers: [logGroupArn],
+        limit: 1,
     })
 
-    const creationTime = DateTime.fromMillis(logGroupInfo.logGroups![0].creationTime!);
-    const retentionEarliest = DateTime.now().minus({days: logGroupInfo.logGroups![0].retentionInDays});
+    if (logGroupInfo.logGroups?.length !== 1) {
+        throw new Error(`Invalid Log Group ARN: ${logGroupArn}`);
+    }
+
+    const creationTime = DateTime.fromMillis(logGroupInfo.logGroups[0].creationTime!);
+    const retentionEarliest = DateTime.now().minus({days: logGroupInfo.logGroups[0].retentionInDays});
 
     const ranges: { start: DateTime, end: DateTime }[] = [];
     let rangeStart = start;

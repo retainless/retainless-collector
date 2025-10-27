@@ -54,6 +54,16 @@ export async function processLogs(
         retainedPeriods: <Period[]>[],
     },
 ): Promise<RetentionRow[]> {
+    if (config.retainedPeriods.length > 0) {
+        // `retainedPeriods` should generally be pre-sorted, but double-check for the latest period.
+        const latestPeriod = DateTime.max(...config.retainedPeriods.map(period => DateTime.fromISO(period.periodEnd)))!;
+
+        const dayDiff = DateTime.fromISO(config.periodEnd).diff(latestPeriod, 'days').days
+        if (dayDiff < 0.9 || dayDiff > 1.1) {
+            throw new Error(`Periods should be roughly 1 day apart. Currently ${dayDiff} days apart.`)
+        }
+    }
+
     const retainedUsersByUserId = new Map<string, RetentionRow>();
     for (const user of retainedUsers) {
         const isPeriodHashable = !!config.retainedPeriods.find(period => period.periodId === user.periodId);
