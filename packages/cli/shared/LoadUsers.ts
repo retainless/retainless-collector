@@ -42,20 +42,26 @@ export async function loadPeriods() {
 }
 
 export async function loadUsers(
-    options: CLIOptions,
+    {
+        start = DateTime.now().startOf('month'),
+        end = DateTime.now().endOf('month'),
+        /** For retention metrics, we calculate up until the current period regardless of `options.end` */
+        isRetentionMetric = true,
+    } = {}
 ): Promise<DDBUser[]> {
-    const config = {
-        start: DateTime.fromISO(options.start),
-        end: DateTime.fromISO(options.end),
-    }
-
     const periodsToSearch = await loadPeriods();
 
     const usersByPeriod = new Map<string, DDBUser[] | null>();
     for (const period of periodsToSearch) {
-        if (period.periodEnd >= config.start && period.periodEnd < config.end) {
-            usersByPeriod.set(period.periodId, null);
+        if (period.periodEnd < start) {
+            continue;
         }
+        if (!isRetentionMetric && period.periodEnd > end) {
+            // for `isRetentionMetric` we must check re-visits up to now regardless of CLI options.
+            continue;
+        }
+
+        usersByPeriod.set(period.periodId, null);
     }
 
     if (usersByPeriod.size === 0) {
@@ -64,12 +70,14 @@ export async function loadUsers(
 
     process.stderr.write(`Loading periods`);
 
-    let unfilledPeriods = <string[]>[];
-    while ((unfilledPeriods = [...usersByPeriod.entries()]
-        .filter(([,v]) => v === null)
-        .map(([k]) => k)) && unfilledPeriods.length) {
+    // load all designated periods, and then their references, but not recursively.
+    for (let i = 0; i < 2; i++) {
+        const unfilledPeriods = [...usersByPeriod.entries()]
+            .filter(([,v]) => v === null)
+            .map(([k]) => k);
+
         for (const periodId of unfilledPeriods) {
-            process.stderr.write('.');
+            process.stderr.write(i === 0 ? '.' : '+');
             let users = <DDBUser[]>[];
             let LastEvaluatedKey: Record<string, AttributeValue> | undefined = undefined;
             do {

@@ -1,23 +1,26 @@
 import {DateTime} from "luxon";
 import {loadUsers} from "../shared/LoadUsers.js";
 import {Command} from "commander";
-import {CLIOptions} from "../shared/CLIOptions.js";
+import {parseCommandOptions} from "../shared/CLIOptions.js";
 
 
 import '../LuxonConfigure.js';
 
 export async function dailyRetention(_: unknown, command: Command) {
-    const options = command.optsWithGlobals<CLIOptions>();
+    const options = parseCommandOptions(command);
     const users = await loadUsers(options);
     const visitorsByCohort = new Map<string, number[]>();
 
     for (const user of users) {
         const periodEnd = DateTime.fromISO(user.periodEnd.S);
         const visitsPrior = user.visitsPrior?.L.map((visit) => DateTime.fromISO(visit.M.periodEnd.S)) ?? [];
-        const firstVisit = DateTime.min(...visitsPrior, periodEnd);
+        const cohort = DateTime.min(...visitsPrior, periodEnd);
 
-        const cohort = firstVisit.startOf('day');
-        const cohortId = cohort.toISODate();
+        if (cohort <= options.start || cohort > options.end) {
+            continue;
+        }
+
+        const cohortId = cohort.toISO();
         const visitors = visitorsByCohort.get(cohortId) ?? [];
 
         let counts = <number[]>[];
@@ -34,8 +37,9 @@ export async function dailyRetention(_: unknown, command: Command) {
         .sort(([a], [b]) => a.localeCompare(b));
     console.log('CohortDay,DayOffset,UsersActive,CohortSize');
     for (const [cohortDay, usersReturnedByOffset] of sortedVisitorsByCohort) {
+        const displayDay = DateTime.fromISO(cohortDay).minus({days: 1}).toISODate();
         for (let i = 0; i < usersReturnedByOffset.length; i++) {
-            console.log(`${cohortDay},${i},${usersReturnedByOffset[i]},${usersReturnedByOffset[0]}`);
+            console.log(`${displayDay},${i},${usersReturnedByOffset[i]},${usersReturnedByOffset[0]}`);
         }
     }
 }

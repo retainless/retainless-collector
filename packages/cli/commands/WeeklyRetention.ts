@@ -1,13 +1,13 @@
 import {DateTime} from "luxon";
 import {loadUsers} from "../shared/LoadUsers.js";
 import {Command} from "commander";
-import {CLIOptions} from "../shared/CLIOptions.js";
+import {parseCommandOptions} from "../shared/CLIOptions.js";
 
 
 import '../LuxonConfigure.js';
 
 export async function weeklyRetention(_: unknown, command: Command) {
-    const options = command.optsWithGlobals<CLIOptions>();
+    const options = parseCommandOptions(command);
     const users = await loadUsers(options);
 
     const visitorsByCohort = new Map<string, number[]>();
@@ -16,6 +16,10 @@ export async function weeklyRetention(_: unknown, command: Command) {
         const periodEnd = DateTime.fromISO(user.periodEnd.S);
         const visitsPrior = user.visitsPrior?.L.map((visit) => DateTime.fromISO(visit.M.periodEnd.S)) ?? [];
         const firstVisit = DateTime.min(...visitsPrior, periodEnd);
+
+        if (firstVisit <= options.start || firstVisit > options.end) {
+            continue;
+        }
 
         const cohort = firstVisit.startOf('week');
         const cohortId = cohort.toISODate();
