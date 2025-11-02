@@ -1,6 +1,6 @@
 {
   "name": "@retainless/cli",
-  "version": "0.1.0",
+  "version": "0.1.1-rc1",
   "description": "Command-line interface for Retainless: Privacy-first app analytics that matter",
   "homepage": "https://retainless.com",
   "license": "LGPL-3.0-only",

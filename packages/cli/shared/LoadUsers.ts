@@ -2,7 +2,6 @@ import {AttributeValue, DynamoDB, QueryCommandOutput, ScanOutput} from "@aws-sdk
 import type {DDBUser} from "../../log-processor/aws/RetainedUsers.js";
 import * as process from "node:process";
 import {DateTime} from "luxon";
-import {CLIOptions} from "./CLIOptions.js";
 
 const clientDDB = new DynamoDB();
 

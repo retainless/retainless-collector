@@ -7,9 +7,9 @@ account, and there is no tracking code and no cookies.
 
 ## retainless-collector
 
-This code is the core gathering agent for Retainless, running in your cloud account to process and store data. It can be
-deployed to [AWS](#install-aws) or [GCP](#install-gcp) and others coming soon. The [Architecture](#architecture) should
-match regardless of cloud provider.
+This code is the core gathering agent for Retainless, running in your cloud account to process and store metrics. It can
+be deployed to [AWS](#install-aws) or [GCP](#install-gcp) and others coming soon. The [Architecture](#architecture)
+should be similar regardless of cloud provider.
 
 ### Getting Started
 
@@ -36,7 +36,8 @@ Terraform:
 
 ```terraform
 module "retainless" {
-  source = "git::https://github.com/retainless/retainless-collector.git//aws/terraform"
+  # note: check for new versions at https://github.com/retainless/retainless-collector/releases
+  source = "git::https://github.com/retainless/retainless-collector.git//aws/terraform?ref=v0.1.1-rc1"
 
   log_group_arn   = "arn:aws:logs:us-east-1:123456789876:log-group:/aws/cloudfront/cdn-prod-access-logs:*"
   log_stream_name = "CloudFront_EA123456789EEAA"
@@ -119,7 +120,8 @@ The output of a metric command is always a CSV file, and status is saved to `STD
 or other program:
 
 ```bash
-retainless --start 2025-10-01 --end 2025-10-31 daily-churn > ~/Documents/DailyChurn.csv
+$ retainless --start 2025-10-01 --end 2025-10-31 daily-churn > ~/Documents/DailyChurn.csv
+Loading periods..............................++++++++++
 ```
 
 ### Architecture
