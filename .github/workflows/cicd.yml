@@ -73,8 +73,8 @@ jobs:
               --generate-notes
           
           pushd build/packages/cli && npm publish \
-            ${IS_PRERELEASE:+"--tag next"}
+            ${IS_PRERELEASE:+"--tag next"} \
             "retainless-cli-${tag#v}.tgz" && popd
           pushd build/packages/log-processor && npm publish \
-            ${IS_PRERELEASE:+"--tag next"}
+            ${IS_PRERELEASE:+"--tag next"} \
             "retainless-log-processor-${tag#v}.tgz" && popd
