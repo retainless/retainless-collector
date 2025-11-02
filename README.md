@@ -37,7 +37,7 @@ Terraform:
 ```terraform
 module "retainless" {
   # note: check for new versions at https://github.com/retainless/retainless-collector/releases
-  source = "git::https://github.com/retainless/retainless-collector.git//aws/terraform?ref=v0.1.1-rc1"
+  source = "git::https://github.com/retainless/retainless-collector.git//aws/terraform?ref=v0.1.1"
 
   log_group_arn   = "arn:aws:logs:us-east-1:123456789876:log-group:/aws/cloudfront/cdn-prod-access-logs:*"
   log_stream_name = "CloudFront_EA123456789EEAA"
