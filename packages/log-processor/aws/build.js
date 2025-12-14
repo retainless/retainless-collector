@@ -11,7 +11,10 @@ await Esbuild.build({
     },
     bundle: true,
     format: 'esm',
-    entryPoints: [Path.join(import.meta.dirname, 'lambda.ts')],
+    entryPoints: [
+        Path.join(import.meta.dirname, 'lambda.ts'),
+        Path.join(import.meta.dirname, 'notifier.ts'),
+    ],
     inject: [Path.join(import.meta.dirname, '..', '..', '_cjs-shim.js')],
     outExtension: {
         '.js': '.mjs'

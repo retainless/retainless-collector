@@ -27,3 +27,19 @@ variable "timezone" {
   default = "America/Chicago"
   description = "Timezone used for determining end-of-day processing schedule"
 }
+
+variable "log_scan_duration" {
+  type = number
+  default = 0
+  description = "Duration in seconds, to chunk AWS CloudWatch Logs queries to limit <10K results (query max)"
+}
+
+variable "notifications_enabled" {
+  type = string
+  default = "NONE"
+  description = "Enable SNS Topic for notifications of log processing results (NONE, ERROR, ALL)"
+  validation {
+    condition = contains(["NONE", "ERROR", "ALL"], var.notifications_enabled)
+    error_message = "Valid values are (NONE, ERROR, ALL)"
+  }
+}

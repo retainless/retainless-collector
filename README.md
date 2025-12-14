@@ -44,6 +44,15 @@ module "retainless" {
 }
 ```
 
+If you enable notifications (using `notifications_enabled = "ERROR"` or `"ALL"`), you must also:
+
+<small>(this can be done using `module.retainless.notifications_topic_arn` output in Terraform, however you likely want
+more flexibility to change emails as-needed without requiring a deployment).</small>
+
+1. Go to the AWS Console > Simple Notification Service > Topics > `retainless-log-processor-results`
+1. Click "Create Subscription"
+1. Subscribe your Email or SMS endpoint to the topic
+
 ##### Install: GCP
 
 Coming soon!

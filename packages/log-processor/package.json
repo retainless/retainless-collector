@@ -43,6 +43,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.908.0",
     "@aws-sdk/client-dynamodb": "^3.908.0",
+    "@aws-sdk/client-sns": "^3.948.0",
     "async": "^3.2.6",
     "luxon": "^3.7.2"
   },

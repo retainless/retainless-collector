@@ -70,3 +70,33 @@ resource "aws_iam_role_policy" "sync" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "notifier" {
+  count = var.notifications_enabled == "NONE" ? 0 : 1
+
+  role   = aws_iam_role.retainless.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+        ],
+        Resource = [
+          "${aws_cloudwatch_log_group.log_processor.arn}:*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish",
+        ],
+        Resource = [
+          aws_sns_topic.notifier[0].arn
+        ]
+      }
+    ]
+  })
+}

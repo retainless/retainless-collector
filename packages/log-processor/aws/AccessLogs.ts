@@ -1,25 +1,16 @@
 import {DateTime, Duration} from "luxon";
 import {AccessLogRow} from "../core/Processor.js";
 import {mapLimit} from "async";
-import {CloudWatchLogs, GetQueryResultsCommandOutput} from "@aws-sdk/client-cloudwatch-logs";
+import {CloudWatchLogs, GetQueryResultsCommandOutput, ResultField} from "@aws-sdk/client-cloudwatch-logs";
 
-export async function getAccessLogs(
+export async function getLogs(
     clientCWL: CloudWatchLogs,
     logGroupArn: string,
     start: DateTime,
     end: DateTime,
-    filters: string[] = [],
+    queryString: string,
     maxDuration = Duration.fromDurationLike({hours: 2}),
-): Promise<AccessLogRow[]> {
-    const queryString = [
-        ...filters,
-        'fields @timestamp, `c-ip` as ip, `cs(User-Agent)` as ua, `cs-uri-stem` as path',
-        'filter ispresent(ip)',
-        'sort @timestamp desc'
-    ].join('\n| ');
-
-    console.log(`Using query string:\n${queryString}`);
-
+) {
     const logGroupInfo = await clientCWL.describeLogGroups({
         logGroupIdentifiers: [logGroupArn],
         limit: 1,
@@ -55,7 +46,7 @@ export async function getAccessLogs(
         throw new Error(`Empty time periods for log group creation: '${creationTime.toSQL()}', retained to: '${retentionEarliest.toSQL()}'`);
     }
 
-    const results = await mapLimit<any, AccessLogRow[]>(ranges, 5, async (range: {
+    const results = await mapLimit<any, ResultField[][]>(ranges, 5, async (range: {
         start: DateTime;
         end: DateTime
     }) => {
@@ -89,16 +80,37 @@ export async function getAccessLogs(
             throw new Error(`Query too close, ${queryResults.statistics.recordsMatched}, to limit ('${range.start.toSQL()}' to '${range.end.toSQL()}'). Reduce 'maxDuration' for logs`);
         }
 
-        return queryResults.results?.map(fields => {
-            const fieldMap = new Map(fields.map(f => [f.field, f.value]));
-            return {
-                ipAddress: fieldMap.get('ip'),
-                userAgent: fieldMap.get('ua'),
-                date: DateTime.fromSQL(fieldMap.get('@timestamp')!),
-                path: fieldMap.get('path'),
-            };
-        }) ?? [];
+        return queryResults.results ?? [];
     });
 
     return results.flat();
+}
+
+export async function getAccessLogs(
+    clientCWL: CloudWatchLogs,
+    logGroupArn: string,
+    start: DateTime,
+    end: DateTime,
+    filters: string[] = [],
+    maxDuration?: Duration,
+): Promise<AccessLogRow[]> {
+    const queryString = [
+        ...filters,
+        'fields @timestamp, `c-ip` as ip, `cs(User-Agent)` as ua, `cs-uri-stem` as path',
+        'filter ispresent(ip)',
+        'sort @timestamp desc'
+    ].join('\n| ');
+
+    console.log(`Using query string:\n${queryString}`);
+    const results = await getLogs(clientCWL, logGroupArn, start, end, queryString, maxDuration);
+
+    return results.map(fields => {
+        const fieldMap = new Map(fields.map(f => [f.field, f.value]));
+        return {
+            ipAddress: fieldMap.get('ip')!,
+            userAgent: fieldMap.get('ua')!,
+            date: DateTime.fromSQL(fieldMap.get('@timestamp')!),
+            path: fieldMap.get('path')!,
+        };
+    });
 }

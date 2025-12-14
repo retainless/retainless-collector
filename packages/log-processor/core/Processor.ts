@@ -76,8 +76,9 @@ export async function processLogs(
         }
     }
 
-    console.log(`Dropping ${retainedUsers.length - retainedUsersByUserId.size} users as unhashable.`);
+    console.log(`Dropped ${retainedUsers.length - retainedUsersByUserId.size} users as unhashable.`);
 
+    console.log(`Analyzing ${accessLog.length} access log events.`);
     const accessLogsByUserId = new Map<string, AccessLogRow[]>();
     for (const log of accessLog) {
         const userId = await getUserId(
@@ -93,6 +94,7 @@ export async function processLogs(
         accessLogsByUserId.get(userId)!.push(log);
     }
 
+    console.log(`Linking ${accessLogsByUserId.size} unique visitors to previous sessions.`);
     const newUsers = <RetentionRow[]>[];
     for (const [userId, logs] of accessLogsByUserId) {
         const dates = logs.map(log => log.date);

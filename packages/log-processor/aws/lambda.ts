@@ -60,7 +60,7 @@ export async function handler(event: ILogProcessorEvent) {
     const periodId = `${config.applicationId}-${periodSK}`;
     const periodExpires = config.periodEnd.plus({ day: config.periodExpiration });
 
-    console.log(`Getting access logs for ${periodStart.toSQL()} to ${config.periodEnd.toSQL()}`);
+    console.log(`Getting access logs for ${periodStart.toISO()} to ${config.periodEnd.toISO()}`);
     const accessLogs = await getAccessLogs(clientCWL, config.logGroupArn, periodStart, config.periodEnd, config.logStreamName ? [
         `filter @logStream = '${config.logStreamName}'`
     ] : [], config.logMaxDuration);
