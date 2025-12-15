@@ -76,9 +76,9 @@ export async function processLogs(
         }
     }
 
-    console.log(`Dropped ${retainedUsers.length - retainedUsersByUserId.size} users as unhashable.`);
+    console.log(`Dropped ${retainedUsers.length - retainedUsersByUserId.size} users as unhashable`);
 
-    console.log(`Analyzing ${accessLog.length} access log events.`);
+    console.log(`Analyzing ${accessLog.length} access log events`);
     const accessLogsByUserId = new Map<string, AccessLogRow[]>();
     for (const log of accessLog) {
         const userId = await getUserId(
@@ -94,7 +94,9 @@ export async function processLogs(
         accessLogsByUserId.get(userId)!.push(log);
     }
 
-    console.log(`Linking ${accessLogsByUserId.size} unique visitors to previous sessions.`);
+    console.log(`Grouped ${accessLogsByUserId.size} unique visitors`);
+
+    let iReturned = 0;
     const newUsers = <RetentionRow[]>[];
     for (const [userId, logs] of accessLogsByUserId) {
         const dates = logs.map(log => log.date);
@@ -120,6 +122,7 @@ export async function processLogs(
         }
 
         if (existingUser) {
+            iReturned++;
             newUsers.push({
                 periodId: config.periodId,
                 userId,
@@ -144,6 +147,9 @@ export async function processLogs(
             });
         }
     }
+
+    console.log(`Linked ${iReturned} returning visitors.`);
+
 
     return newUsers;
 }

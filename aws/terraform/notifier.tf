@@ -11,36 +11,6 @@ resource "aws_sns_topic" "notifier" {
   name = "retainless-log-processor-results"
 }
 
-resource "aws_cloudwatch_log_metric_filter" "notifier" {
-  count = var.notifications_enabled == "NONE" ? 0 : 1
-
-  log_group_name = aws_cloudwatch_log_group.log_processor.name
-  name = "retainless-log-processor-notifications"
-  pattern = var.notifications_enabled == "ERROR" ? "Invoke Error" : "END RequestId"
-
-  metric_transformation {
-    name = "EventCount"
-    namespace = "RetainlessLogProcessor"
-    value = "1"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "notifier" {
-  count = var.notifications_enabled == "NONE" ? 0 : 1
-
-  alarm_name = "retainless-log-processor-notification-event"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods = 1
-  metric_name = aws_cloudwatch_log_metric_filter.notifier[0].metric_transformation[0].name
-  namespace = aws_cloudwatch_log_metric_filter.notifier[0].metric_transformation[0].namespace
-  period = 60
-  statistic = "Sum"
-  threshold = 1
-  alarm_actions = [
-    aws_lambda_function.notifier[0].arn
-  ]
-}
-
 resource "aws_lambda_function" "notifier" {
   count = var.notifications_enabled == "NONE" ? 0 : 1
 
@@ -65,6 +35,25 @@ resource "aws_lambda_function" "notifier" {
       LOG_GROUP_ARN = aws_cloudwatch_log_group.log_processor.arn,
     }
   }
+}
+
+resource "aws_lambda_permission" "notifier" {
+  count = var.notifications_enabled == "NONE" ? 0 : 1
+
+  statement_id = "retainless-notifier-log-stream"
+  action = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.notifier[0].function_name
+  principal = "logs.amazonaws.com"
+  source_arn = "${aws_cloudwatch_log_group.log_processor.arn}:*"
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "notifier" {
+  count = var.notifications_enabled == "NONE" ? 0 : 1
+
+  destination_arn = aws_lambda_function.notifier[0].arn
+  filter_pattern  = var.notifications_enabled == "ERROR" ? "Invoke Error" : "END RequestId"
+  log_group_name = aws_cloudwatch_log_group.log_processor.name
+  name = "retainless-log-processor-notifications"
 }
 
 output "notifications_topic_arn" {

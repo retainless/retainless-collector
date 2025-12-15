@@ -43,8 +43,8 @@ export async function handler() {
 
     let errorMessage: string | undefined;
     let successMessage: string | undefined;
-    if (Object.keys(logsByRun).length !== 1) {
-        errorMessage = `Unexpected number of runs: ${logsByRun.size}`;
+    if (Object.keys(logsByRun).length === 0) {
+        errorMessage = `Log processor did not run in last 1 day`;
     } else {
         const messages = Object.values(logsByRun)[0]!.map(([,message]) => {
             try { return JSON.parse(message) }
@@ -55,13 +55,15 @@ export async function handler() {
         if (error) errorMessage = error.errorMessage;
         else if (!messages.includes('Done!')) errorMessage = 'Unexpected error'
         else {
-            const [,accessLogVolume] = findMatch(messages, /Hashing (\d+) access logs by user/) ?? [];
-            const [,uniqueVisitors] = findMatch(messages, /Linking (\d+) unique visitors to previous sessions/) ?? [];
             const [,start, end] = findMatch(messages, /Getting access logs for ([\d:\-.TZ ]{24,30}) to ([\d:\-.TZ ]{24,30})/) ?? [];
+            const [,accessLogVolume] = findMatch(messages, /Analyzing (\d+) access log events/) ?? [];
+            const [,returningVisitors] = findMatch(messages, /Linked (\d+) returning visitors/) ?? [];
+            const [,uniqueVisitors] = findMatch(messages, /Grouped (\d+) unique visitors/) ?? [];
             const [,wcusConsumed] = findMatch(messages, /Consumed (\d+) WCUs/) ?? [];
 
             successMessage = `Successfully processed ${accessLogVolume} access logs:
 - ${uniqueVisitors} unique visitors
+- ${returningVisitors} are returning visitors
 - ${wcusConsumed} WCUs consumed
 / From: ${start}
 / To: ${end}`;
