@@ -1,7 +1,6 @@
-import {getLogs} from "./AccessLogs.js";
 import {CloudWatchLogs} from "@aws-sdk/client-cloudwatch-logs";
-import {DateTime, Duration} from "luxon";
 import {SNS} from "@aws-sdk/client-sns";
+import Zlib from "zlib";
 
 const clientCWL = new CloudWatchLogs();
 const clientSNS = new SNS();
@@ -14,7 +13,7 @@ function findMatch(messages: string[], regex: RegExp) {
     return null;
 }
 
-export async function handler() {
+export async function handler(event: any) {
     const config = {
         notificationTopic: process.env.NOTIFICATION_TOPIC_ARN,
         logGroupArn: process.env.LOG_GROUP_ARN?.replace(/:\*$/, ''),
@@ -24,19 +23,23 @@ export async function handler() {
         throw new Error(`Required EnvVars not configured: ${JSON.stringify(config)}`);
     }
 
-    const searchEnd = DateTime.now();
-    const searchStart = searchEnd.minus({day: 1});
-    const logs = await getLogs(clientCWL, config.logGroupArn, searchStart, searchEnd, [
-        `fields @timestamp, @message`,
-        `sort @timestamp desc`,
-    ].join(' |\n'), Duration.fromObject({ days: 14 }));
+    const payload = Buffer.from(event.awslogs.data, 'base64');
+    const logEvent = JSON.parse(Zlib.gunzipSync(payload).toString());
 
-    const logsByRun = Object.groupBy(logs.flatMap((fields) => {
-        const fieldMap = new Map(fields.map(f => [f.field, f.value]));
-        const output = fieldMap.get("@message")!;
-        const [,, run,, message] = output.match(/^(START|END) RequestId: ([a-f0-9\-]+)/)
-        ?? output.match(/^([\d:\-.TZ]{24})\t([a-f0-9\-]+)\t(ERROR\tInvoke Error )\t(.*)/)
-        ?? output.match(/^([\d:\-.TZ]{24})\t([a-f0-9\-]+)\t(INFO|ERROR)\t(.*)/)
+    const logs = await clientCWL.getLogEvents({
+        logGroupName: logEvent.logGroup,
+        logStreamName: logEvent.logStream,
+    })
+
+    if (!logs.events?.length) {
+        throw new Error(`No log events found for log group '${config.logGroupArn}'`);
+    }
+
+    const logsByRun = Object.groupBy(logs.events.flatMap((log) => {
+        const awsMessage = log.message!;
+        const [,, run,, message] = awsMessage.match(/^(START|END) RequestId: ([a-f0-9\-]+)/)
+        ?? awsMessage.match(/^([\d:\-.TZ]{24})\t([a-f0-9\-]+)\t(ERROR\tInvoke Error )\t(.*)/)
+        ?? awsMessage.match(/^([\d:\-.TZ]{24})\t([a-f0-9\-]+)\t(INFO|ERROR)\t(.*)/)
         ?? [];
         return (run && message) ? [[run, message]] : [];
     }), ([run]) => run);

@@ -81,8 +81,7 @@ resource "aws_iam_role_policy" "notifier" {
       {
         Effect = "Allow"
         Action = [
-          "logs:StartQuery",
-          "logs:GetQueryResults",
+          "logs:GetLogEvents",
         ],
         Resource = [
           "${aws_cloudwatch_log_group.log_processor.arn}:*"
