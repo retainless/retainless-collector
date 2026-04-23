@@ -1,13 +1,16 @@
 import {DateTime} from "luxon";
 import {loadUsers} from "../shared/LoadUsers.js";
 import {Command} from "commander";
-import {parseCommandOptions} from "../shared/CLIOptions.js";
+import {CLIOptions, parseCommandOptions} from "../shared/CLIOptions.js";
 
 
 import '../LuxonConfigure.js';
 
-export async function dailyRetention(_: unknown, command: Command) {
-    const options = parseCommandOptions(command);
+export interface IDailyRetentionOptions extends CLIOptions {
+
+}
+
+export async function dailyRetention(options: IDailyRetentionOptions) {
     const users = await loadUsers(options);
     const visitorsByCohort = new Map<string, number[]>();
 
@@ -68,4 +71,7 @@ CohortDay,DayOffset,UsersActive,CohortSize
 `.trim());
 
 
-DailyRetentionCLI.action(dailyRetention);
+DailyRetentionCLI.action((_: unknown, command: Command) => {
+    const options = parseCommandOptions(command);
+    return dailyRetention(options);
+});

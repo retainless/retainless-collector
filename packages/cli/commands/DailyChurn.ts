@@ -1,13 +1,16 @@
 import {DateTime} from "luxon";
 import {loadUsers} from "../shared/LoadUsers.js";
 import {Command} from "commander";
-import {parseCommandOptions} from "../shared/CLIOptions.js";
+import {CLIOptions, parseCommandOptions} from "../shared/CLIOptions.js";
 
 
 import '../LuxonConfigure.js';
 
-export async function dailyChurn(_: unknown, command: Command) {
-    const options = parseCommandOptions(command);
+export interface IDailyChurnOptions extends CLIOptions {
+
+}
+
+export async function dailyChurn(options: IDailyChurnOptions) {
     const users = await loadUsers(options);
     const visitorsByCohort = new Map<string, number[]>();
 
@@ -79,4 +82,7 @@ CohortDay,DayOffset,UsersSurviving,PoolSize,CohortSize
 2025-10-09,3,16,20,100
 `.trim());
 
-DailyChurnCLI.action(dailyChurn);
+DailyChurnCLI.action((_: unknown, command: Command) => {
+    const options = parseCommandOptions(command);
+    return dailyChurn(options);
+});

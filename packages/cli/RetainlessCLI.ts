@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 import {Command} from "commander";
 import {DateTime} from "luxon";
+
 import {DailyChurnCLI} from "./commands/DailyChurn.js";
+export {IDailyChurnOptions, dailyChurn} from "./commands/DailyChurn.js";
+
 import {DailyRetentionCLI} from "./commands/DailyRetention.js";
+export {IDailyRetentionOptions, dailyRetention} from "./commands/DailyRetention.js";
+
 import {WeeklyRetentionCLI} from "./commands/WeeklyRetention.js";
+export {IWeeklyRetentionOptions, weeklyRetention} from "./commands/WeeklyRetention.js";
+
+// ------
 
 export const RetainlessCLI = new Command("retainless");
 RetainlessCLI.showHelpAfterError();
